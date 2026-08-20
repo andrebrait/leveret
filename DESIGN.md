@@ -140,6 +140,20 @@ never needs its own sandbox because the agent *is* the sandbox).
 Both are prompt contracts (files in `agents/`), executable by any client that can
 spawn read-only subagents; leveret ships the contracts, not an orchestrator.
 
+## Providers (BYOM — explicit requirement, 2026-08-20)
+
+The engine layer stays model-free. Everywhere leveret drives or configures a model
+(P5 harness, any future direct integration), BOTH providers are first-class, each
+through BOTH auth paths:
+
+- **Anthropic Claude** — API key, and OAuth for Claude Pro/Max subscriptions.
+- **OpenAI** — API key, and OAuth for ChatGPT subscriptions.
+
+Practical consequence for P5: the agent contracts must run unmodified under a client
+authenticated either way (e.g. Claude Code under a Max subscription or an API key;
+a Codex/ChatGPT-backed client likewise), and any provider abstraction leveret ships
+treats subscription OAuth as a peer of the API key, never an afterthought.
+
 ## Roadmap
 
 - [x] **P1** — engine registry (semgrep, gitleaks, shellcheck, ruff, actionlint),
