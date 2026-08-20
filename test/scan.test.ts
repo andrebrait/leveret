@@ -194,6 +194,14 @@ describe("memory", () => {
     expect(entry?.lastApplied).toBeDefined();
     expect(existsSync(join(repo, ".leveret", "applied.json"))).toBe(true);
   });
+
+  it("the store ships its own .gitignore so the sidecar never gets committed", async () => {
+    rmSync(join(repo, ".leveret"), { recursive: true, force: true });
+    await remember({ repo, fp: "ruff/F821/**", grade: "priced-noise", reason: "fixture" });
+    const ignore = readFileSync(join(repo, ".leveret", ".gitignore"), "utf8");
+    expect(ignore).toContain("applied.json");
+    expect(ignore).not.toContain("memory.jsonl");
+  });
 });
 
 describe("P4 engines", () => {

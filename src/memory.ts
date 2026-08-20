@@ -27,6 +27,15 @@ const memPath = (repo: string) => join(repo, ".leveret", "memory.jsonl");
 // regenerable bookkeeping — gitignore it.
 const appliedPath = (repo: string) => join(repo, ".leveret", "applied.json");
 
+// The store dir ships its own .gitignore: verdicts (memory.jsonl) are versioned,
+// the regenerable hygiene sidecar never is. Created once, not overwritten — a repo
+// may extend it.
+async function ensureStore(repo: string): Promise<void> {
+  const dir = dirname(memPath(repo));
+  await mkdir(dir, { recursive: true });
+  await writeFile(join(dir, ".gitignore"), "applied.json\n", { flag: "wx" }).catch(() => {});
+}
+
 async function readApplied(repo: string): Promise<Record<string, string>> {
   try {
     return JSON.parse(await readFile(appliedPath(repo), "utf8")) as Record<string, string>;
@@ -96,7 +105,7 @@ export async function remember(opts: {
     ...(opts.author ? { author: opts.author } : {}),
     created: new Date().toISOString().slice(0, 10),
   };
-  await mkdir(dirname(memPath(opts.repo)), { recursive: true });
+  await ensureStore(opts.repo);
   await appendFile(memPath(opts.repo), `${JSON.stringify(entry)}\n`);
   return entry;
 }
@@ -144,6 +153,7 @@ export async function applyMemory(
     const today = new Date().toISOString().slice(0, 10);
     const stamps = await readApplied(repo);
     for (const e of applied) stamps[e.fp] = today;
+    await ensureStore(repo);
     await writeFile(appliedPath(repo), `${JSON.stringify(stamps, null, 1)}\n`);
   }
   return { kept, suppressed: [...tally.values()] };
