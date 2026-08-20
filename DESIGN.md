@@ -159,6 +159,17 @@ Corpus: historical pfBlockerNG PRs whose accepted CodeRabbit findings are indexe
 provenance comments in `tests/` (CR2, CR5, #65, #685, …) plus their full review
 threads. Replay each PR's diff through the pipeline at the pre-merge SHA.
 
+Replay mechanics (probed 2026-08-20): the exact reviewed tree survives rebase-merge
+via `git fetch origin pull/N/head`; diff base is `git merge-base <head> origin/devel`
+(linear history makes that the fork point). Scan a throwaway detached worktree at the
+fetched SHA with the repo profile applied; CodeRabbit's side comes from
+`pulls/N/comments` + `pulls/N/reviews` filtered to `coderabbitai[bot]`. Candidate
+PRs with the densest engagement, verified by API count: #2521 (7 inline), #2417
+(7 inline / 4 reviews), #2474 (6/5), #2471 (6/2), #2444 (6/1); a dozen more carry
+1–3 findings each. Note the deterministic layer alone is expected to catch only a
+minority of CodeRabbit's LLM-judged findings — the first replay establishes that
+baseline gap, and P5's agents are what close it.
+
 Metrics:
 
 - **Recall** against CodeRabbit's *accepted* findings (the ones that produced fixes).
