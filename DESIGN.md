@@ -175,7 +175,10 @@ threads. Replay each PR's diff through the pipeline at the pre-merge SHA.
 
 Replay mechanics (probed 2026-08-20): the exact reviewed tree survives rebase-merge
 via `git fetch origin pull/N/head`; diff base is `git merge-base <head> origin/devel`
-(linear history makes that the fork point). Scan a throwaway detached worktree at the
+(linear history makes that the fork point). Replays run against the dedicated mirror
+`~/git/pfblockerng-bench` (origin = GitHub), never the working clone — bench results
+must not race live development, and bench worktrees must not interfere with it. The
+clone must be full: a shallow clone hides old fork points and merge-base fails. Scan a throwaway detached worktree at the
 fetched SHA with the repo profile applied; CodeRabbit's side comes from
 `pulls/N/comments` + `pulls/N/reviews` filtered to `coderabbitai[bot]`. Candidate
 PRs with the densest engagement, verified by API count: #2521 (7 inline), #2417
