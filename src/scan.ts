@@ -1,9 +1,11 @@
-import { join } from "node:path";
-import { ENGINES, which, type ScanContext } from "./engines/registry.js";
+import { existsSync, realpathSync } from "node:fs";
+import { join, resolve } from "node:path";
+import { baseFindingKeys, findingKey } from "./delta.js";
+import { ENGINES, which, type Engine, type ScanContext } from "./engines/registry.js";
 import { run } from "./exec.js";
 import type { EngineReport, Finding, ScanResult } from "./findings.js";
 import { applyMemory } from "./memory.js";
-import { filterFindings, loadProfile, scopeFiles } from "./profile.js";
+import { filterFindings, loadProfile, scopeFiles, type Profile } from "./profile.js";
 
 export async function changedFiles(repo: string, base: string): Promise<string[]> {
   // ACMR: deletions have nothing to scan. -z survives any file name.
@@ -16,48 +18,97 @@ export async function changedFiles(repo: string, base: string): Promise<string[]
   return r.stdout.split("\0").filter(Boolean);
 }
 
+/** Run every applicable engine over one tree. The single engine-execution path —
+ * the head scan and the delta base scan both go through here. */
+async function runEngines(
+  ctx: ScanContext,
+  profile: Profile,
+  wanted: Engine[],
+  reports?: EngineReport[],
+): Promise<Finding[]> {
+  const findings: Finding[] = [];
+  await Promise.all(
+    wanted.map(async (engine) => {
+      // Rule packs resolve against the head repo: a base tree may predate them.
+      const rules = profile.engines[engine.id]?.rules?.map((r) => resolve(ctx.repo, r));
+      const ectx: ScanContext = { ...ctx, rules };
+      const selected = scopeFiles(profile, engine.id, engine.select(ectx));
+      if (selected.length === 0) {
+        reports?.push({ engine: engine.id, status: "not-applicable" });
+        return;
+      }
+      if (!(await which(engine.bin))) {
+        reports?.push({ engine: engine.id, status: "missing", detail: `${engine.bin} not on PATH` });
+        return;
+      }
+      try {
+        const found = await engine.scan(ectx, selected);
+        // Some engines (ruff) echo absolute paths — and resolve symlinks while at
+        // it (macOS /var vs /private/var). Identity across trees needs
+        // repo-relative files, so strip both spellings of the repo root here.
+        const roots = [ctx.repo, realpathSync(ctx.repo)];
+        for (const f of found) {
+          for (const root of roots) {
+            if (f.file.startsWith(`${root}/`)) f.file = f.file.slice(root.length + 1);
+          }
+        }
+        findings.push(...found);
+        reports?.push({ engine: engine.id, status: found.length > 0 ? "findings" : "clean" });
+      } catch (err) {
+        reports?.push({ engine: engine.id, status: "error", detail: String(err).slice(0, 500) });
+      }
+    }),
+  );
+  return findings;
+}
+
 export async function scan(opts: {
   repo: string;
   base?: string;
   files?: string[];
   engines?: string[];
   profilePath?: string;
+  /** with a base: drop findings already present at the base tree (default true) */
+  delta?: boolean;
 }): Promise<ScanResult> {
   const files = opts.files ?? (opts.base ? await changedFiles(opts.repo, opts.base) : []);
   if (files.length === 0 && !opts.files) {
     throw new Error("scan needs either files[] or a base ref with changes");
   }
-  const profile = await loadProfile(opts.profilePath ?? join(opts.repo, ".leveret.yml"));
-  const ctx: ScanContext = { repo: opts.repo, files, base: opts.base };
+  const profile = await loadProfile(
+    opts.profilePath ? resolve(opts.profilePath) : join(opts.repo, ".leveret.yml"),
+  );
   const wanted = ENGINES.filter((e) => !opts.engines || opts.engines.includes(e.id));
 
-  const findings: Finding[] = [];
   const reports: EngineReport[] = [];
-  await Promise.all(
-    wanted.map(async (engine) => {
-      const ectx: ScanContext = { ...ctx, rules: profile.engines[engine.id]?.rules };
-      const selected = scopeFiles(profile, engine.id, engine.select(ectx));
-      if (selected.length === 0) {
-        reports.push({ engine: engine.id, status: "not-applicable" });
-        return;
-      }
-      if (!(await which(engine.bin))) {
-        reports.push({ engine: engine.id, status: "missing", detail: `${engine.bin} not on PATH` });
-        return;
-      }
-      try {
-        const found = await engine.scan(ectx, selected);
-        findings.push(...found);
-        reports.push({ engine: engine.id, status: found.length > 0 ? "findings" : "clean" });
-      } catch (err) {
-        reports.push({ engine: engine.id, status: "error", detail: String(err).slice(0, 500) });
-      }
-    }),
-  );
+  const findings = await runEngines({ repo: opts.repo, files, base: opts.base }, profile, wanted, reports);
+
+  // Delta: everything the base tree already produced is pre-existing. Range engines
+  // (gitleaks) are inherently delta and deselect themselves without a base.
+  let preExisting = 0;
+  if (opts.base) {
+    const baseKeys = await baseFindingKeys(opts.repo, opts.base, (baseRepo) =>
+      runEngines(
+        { repo: baseRepo, files: files.filter((f) => existsSync(join(baseRepo, f))) },
+        profile,
+        wanted,
+      ),
+    );
+    for (const f of findings) {
+      f.provenance = baseKeys.has(await findingKey(opts.repo, f)) ? "pre-existing" : "introduced";
+    }
+    if (opts.delta !== false) {
+      preExisting = findings.filter((f) => f.provenance === "pre-existing").length;
+      findings.splice(0, findings.length, ...findings.filter((f) => f.provenance === "introduced"));
+    }
+  } else {
+    for (const f of findings) f.provenance = "introduced";
+  }
+
   const { kept: afterProfile, suppressed: byProfile } = filterFindings(profile, findings);
   const { kept, suppressed: byMemory } = await applyMemory(opts.repo, afterProfile);
   const suppressed = [...byProfile, ...byMemory].sort((a, b) => a.rule.localeCompare(b.rule));
   kept.sort((a, b) => a.file.localeCompare(b.file) || a.line - b.line);
   reports.sort((a, b) => a.engine.localeCompare(b.engine));
-  return { findings: kept, engines: reports, suppressed };
+  return { findings: kept, engines: reports, suppressed, preExisting };
 }
