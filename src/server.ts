@@ -4,6 +4,7 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { z } from "zod";
 import { astSearch } from "./astsearch.js";
 import { context } from "./context.js";
+import { loadContract } from "./prompts.js";
 import { memoryList, remember } from "./memory.js";
 import { scan } from "./scan.js";
 
@@ -115,6 +116,37 @@ server.registerTool(
   },
   async (args) => ({
     content: [{ type: "text", text: JSON.stringify(await memoryList(args), null, 1) }],
+  }),
+);
+
+server.registerPrompt(
+  "review",
+  {
+    description:
+      "Contract for the read-only review agent: gather scan leads, context, diff and " +
+      "cross-file blast radius, run every lens, emit falsifiable concerns as JSON.",
+    argsSchema: { repo: z.string(), base: z.string() },
+  },
+  ({ repo, base }) => ({
+    messages: [
+      { role: "user", content: { type: "text", text: loadContract("review", { repo, base }) } },
+    ],
+  }),
+);
+
+server.registerPrompt(
+  "verify",
+  {
+    description:
+      "Contract for the adversarial verification agent: refute-or-evidence every " +
+      "concern and lead, grade actionable / priced-noise / false-positive, persist " +
+      "drops via remember, report only what survives.",
+    argsSchema: { repo: z.string(), base: z.string() },
+  },
+  ({ repo, base }) => ({
+    messages: [
+      { role: "user", content: { type: "text", text: loadContract("verify", { repo, base }) } },
+    ],
   }),
 );
 

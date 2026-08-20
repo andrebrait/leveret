@@ -169,7 +169,7 @@ treats subscription OAuth as a peer of the API key, never an afterthought.
       auto-apply in `scan`, promotion candidates
 - [x] **P4** — engine additions: osv-scanner (dependency CVEs), zizmor (workflow
       security), project-local phpstan/phpcs, custom ast-grep rule packs
-- [ ] **P5** — review + verification agent prompt contracts
+- [x] **P5** — review + verification agent prompt contracts
 - [ ] **P6** — benchmark, then the adoption decision
 
 ## Validation gate (the benchmark)
