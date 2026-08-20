@@ -1,0 +1,47 @@
+{
+ "pr": "2471",
+ "head": "7a9bd1aa90f4ed68d91585b8cf7e5cbd581025cb",
+ "base": "e03f4c6139c13380368dbe7d1196575a6b220369",
+ "files": [
+  ".github/workflows/test-version-matrix.yml",
+  "docs/misc/architecture-notes.md",
+  "scripts/read-version-matrix.sh",
+  "scripts/smoke-on-box.sh",
+  "tests/shell/build_leg_ports_parity_env.sh",
+  "tests/shell/smoke_on_box_spec.sh",
+  "tests/smoke/_matrix.py",
+  "tests/smoke/helpers.py",
+  "tests/smoke/test_nightly_install.py",
+  "tests/smoke/test_repo_install.py",
+  "tests/test_build_pkg_portable.py",
+  "tests/test_smoke_leg_zero_selection_gate.py",
+  "tests/test_smoke_matrix.py",
+  "tests/test_version_literal_check.py"
+ ],
+ "result": {
+  "findings": [],
+  "engines": [
+   {
+    "engine": "actionlint",
+    "status": "clean"
+   },
+   {
+    "engine": "gitleaks",
+    "status": "clean"
+   },
+   {
+    "engine": "ruff",
+    "status": "clean"
+   },
+   {
+    "engine": "semgrep",
+    "status": "clean"
+   },
+   {
+    "engine": "shellcheck",
+    "status": "clean"
+   }
+  ],
+  "suppressed": []
+ }
+}

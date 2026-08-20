@@ -1,0 +1,56 @@
+{
+ "pr": "2444",
+ "head": "aaf8019d56d33eb537dab21da2c8657977f95342",
+ "base": "74930dadd6a5e9b81158b1c124797d6bc12a3f8d",
+ "files": [
+  "CONTRIBUTING.md",
+  "README.md",
+  "docs/misc/architecture-notes.md",
+  "scripts/build-repo-portable.py",
+  "scripts/build-repo.sh",
+  "scripts/channel-install/install-common.sh",
+  "scripts/channel-install/install-edge.sh",
+  "scripts/channel-install/install-nightly.sh",
+  "scripts/channel-install/install-stable.sh",
+  "scripts/channel-install/install-testing.sh",
+  "scripts/gen_landing.py",
+  "scripts/publish-pkg-repo.sh",
+  "scripts/rc.d/pfblockerng_repo_generate.sh",
+  "src/usr/local/pkg/pfblockerng/pfblockerng.inc",
+  "tests/shell/cdpath_spec.sh",
+  "tests/shell/generate_hook_spec.sh",
+  "tests/shell/publish_pkg_repo_spec.sh",
+  "tests/skip-allowlist.txt",
+  "tests/smoke/test_repo_install.py",
+  "tests/test_channel_install.py",
+  "tests/test_gen_landing.py",
+  "tests/test_issue2149_live_repo_identity.py",
+  "tests/test_repo_conf_generators.py"
+ ],
+ "result": {
+  "findings": [],
+  "engines": [
+   {
+    "engine": "actionlint",
+    "status": "not-applicable"
+   },
+   {
+    "engine": "gitleaks",
+    "status": "clean"
+   },
+   {
+    "engine": "ruff",
+    "status": "clean"
+   },
+   {
+    "engine": "semgrep",
+    "status": "clean"
+   },
+   {
+    "engine": "shellcheck",
+    "status": "clean"
+   }
+  ],
+  "suppressed": []
+ }
+}

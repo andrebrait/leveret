@@ -1,0 +1,35 @@
+{
+ "pr": "2474",
+ "head": "53c54bac29282adae5e4fd111a390fc643d79995",
+ "base": "b8f967fb54b862129baefc8c0e41849c1ea9b808",
+ "files": [
+  ".github/workflows/agent-config.yml",
+  "tests/test_agent_roles_check.py"
+ ],
+ "result": {
+  "findings": [],
+  "engines": [
+   {
+    "engine": "actionlint",
+    "status": "clean"
+   },
+   {
+    "engine": "gitleaks",
+    "status": "clean"
+   },
+   {
+    "engine": "ruff",
+    "status": "clean"
+   },
+   {
+    "engine": "semgrep",
+    "status": "clean"
+   },
+   {
+    "engine": "shellcheck",
+    "status": "not-applicable"
+   }
+  ],
+  "suppressed": []
+ }
+}

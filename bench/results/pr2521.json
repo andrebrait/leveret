@@ -1,0 +1,88 @@
+{
+ "pr": "2521",
+ "head": "0bdd7d91c374c0fb31a442932b5a82448eea2f72",
+ "base": "03d1e963f0e8fb4c4673b0fef6b12134ff7a037f",
+ "files": [
+  ".agents/context/smoke.md",
+  ".agents/policy/testing.md",
+  ".agents/skills/subsystem-sweep/SKILL.md",
+  ".githooks/pre-commit",
+  ".github/workflows/agent-config.yml",
+  ".github/workflows/build-image.yml",
+  ".github/workflows/build-pkg-linux.yml",
+  ".github/workflows/context-budget.yml",
+  ".github/workflows/hsts-refresh.yml",
+  ".github/workflows/image-refresh.yml",
+  ".github/workflows/module-durations.yml",
+  ".github/workflows/nightly-failure-alert.yml",
+  ".github/workflows/nightly.yml",
+  ".github/workflows/pkg-render-site.yml",
+  ".github/workflows/pkg-republish.yml",
+  ".github/workflows/psl-refresh.yml",
+  ".github/workflows/release-published.yml",
+  ".github/workflows/release.yml",
+  ".github/workflows/repo-install.yml",
+  ".github/workflows/smoke-single.yml",
+  ".github/workflows/smoke.yml",
+  ".github/workflows/test-version-matrix.yml",
+  ".github/workflows/test.yml",
+  ".github/workflows/tld-refresh.yml",
+  ".github/workflows/top1m-healthcheck.yml",
+  ".github/workflows/ui-tests.yml",
+  ".github/workflows/version-tracker.yml",
+  ".python-version",
+  "AGENTS.md",
+  "CONTRIBUTING.md",
+  "docs/misc/local-smoke-debian.md",
+  "pyproject.toml",
+  "scripts/agent/run-gates.sh",
+  "scripts/local-smoke.sh",
+  "scripts/smoke-on-box.sh",
+  "tests/shell/agent_run_gates_git_spec.sh",
+  "tests/shell/agent_run_gates_spec.sh",
+  "tests/shell/local_smoke_spec.sh",
+  "tests/shell/precommit_composer_vendor_spec.sh",
+  "tests/shell/precommit_hostile_path_spec.sh",
+  "tests/shell/smoke_on_box_spec.sh",
+  "tests/skip-allowlist.txt",
+  "tests/smoke/conftest.py",
+  "tests/smoke/ui/__init__.py",
+  "tests/smoke/ui/conftest.py",
+  "tests/smoke/ui/webui.py",
+  "tests/test_benchmarks_ci_deps.py",
+  "tests/test_check_skip_allowlist.py",
+  "tests/test_ci_refresh_composer_vendor.py",
+  "tests/test_ci_tool_pins.py",
+  "tests/test_issue2231_workflow_hygiene.py",
+  "tests/test_issue2246_lan_gated_qcow_cache.py",
+  "tests/test_shard_union.py",
+  "tests/test_shell_ci_routing.py",
+  "uv.lock"
+ ],
+ "result": {
+  "findings": [],
+  "engines": [
+   {
+    "engine": "actionlint",
+    "status": "clean"
+   },
+   {
+    "engine": "gitleaks",
+    "status": "clean"
+   },
+   {
+    "engine": "ruff",
+    "status": "clean"
+   },
+   {
+    "engine": "semgrep",
+    "status": "clean"
+   },
+   {
+    "engine": "shellcheck",
+    "status": "clean"
+   }
+  ],
+  "suppressed": []
+ }
+}
