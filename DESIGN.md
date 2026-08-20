@@ -165,7 +165,7 @@ treats subscription OAuth as a peer of the API key, never an afterthought.
       normalized findings, MCP `scan` + `ast_search`, integration tests
 - [ ] **P2** — `.leveret.yml` profiles: path scopes, severity floors, reasoned
       suppressions, suppression reporting
-- [ ] **P3** — memory store, fingerprints + anchors, `remember` + `memory` tools,
+- [x] **P3** — memory store, fingerprints + anchors, `remember` + `memory` tools,
       auto-apply in `scan`, promotion candidates
 - [ ] **P4** — engine additions: osv-scanner (dependency CVEs), zizmor (workflow
       security), project-local phpstan/phpcs, custom ast-grep rule packs

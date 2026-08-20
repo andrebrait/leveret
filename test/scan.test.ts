@@ -1,9 +1,10 @@
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, writeFileSync, mkdirSync } from "node:fs";
+import { mkdtempSync, writeFileSync, mkdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { beforeAll, describe, expect, it } from "vitest";
 import { astSearch } from "../src/astsearch.js";
+import { memoryList, remember } from "../src/memory.js";
 import { scan } from "../src/scan.js";
 
 // Real-tool integration test: plants one known defect per engine in a scratch git
@@ -119,6 +120,64 @@ suppress:
   it("a suppress entry without a reason is a config error, not a silent drop", async () => {
     writeFileSync(join(repo, ".leveret.yml"), "suppress:\n  - rule: ruff/F821\n");
     await expect(scan({ repo, base: "base" })).rejects.toThrow(/reason/);
+  });
+});
+
+describe("memory", () => {
+  // Runs after the profile suite: the last profile test left an INVALID .leveret.yml
+  // in the fixture repo, so rewrite a benign one first.
+  it("a remembered class grade auto-applies on the next scan, tallied with its reason", async () => {
+    writeFileSync(join(repo, ".leveret.yml"), "# empty profile\n");
+    const before = await scan({ repo, base: "base", engines: ["shellcheck"] });
+    expect(before.findings.some((f) => f.rule === "SC2086")).toBe(true);
+
+    await remember({
+      repo,
+      fp: "shellcheck/SC2086/bad.sh",
+      grade: "priced-noise",
+      reason: "fixture: unquoted on purpose",
+    });
+    const after = await scan({ repo, base: "base", engines: ["shellcheck"] });
+    expect(after.findings.some((f) => f.rule === "SC2086")).toBe(false);
+    expect(
+      after.suppressed.find((s) => s.rule === "shellcheck/SC2086/bad.sh"),
+    ).toMatchObject({ reason: "fixture: unquoted on purpose" });
+  });
+
+  it("an anchored memory dies when its line changes; grade no longer auto-applies", async () => {
+    const memPath = join(repo, ".leveret", "memory.jsonl");
+    rmSync(memPath, { force: true });
+    const anchored = await scan({ repo, base: "base", engines: ["shellcheck"] });
+    const target = anchored.findings.find((f) => f.rule === "SC2086");
+    expect(target).toBeDefined();
+    await remember({
+      repo,
+      fp: "shellcheck/SC2086/bad.sh",
+      grade: "false-positive",
+      reason: "anchored pricing",
+      anchorFile: "bad.sh",
+      anchorLine: target!.line,
+    });
+    // memory applies while the anchor line is untouched
+    const held = await scan({ repo, base: "base", engines: ["shellcheck"] });
+    expect(held.findings.some((f) => f.rule === "SC2086")).toBe(false);
+    // rewrite the anchored line: same rule fires elsewhere in the file
+    writeFileSync(join(repo, "bad.sh"), "#!/bin/sh\ng=$2\ncat $g\n");
+    const stale = await scan({ repo, files: ["bad.sh"], engines: ["shellcheck"] });
+    expect(stale.findings.some((f) => f.rule === "SC2086")).toBe(true);
+  });
+
+  it("remember rejects a grade of actionable — only drops are stored", async () => {
+    await expect(
+      remember({ repo, fp: "ruff/F821/bad.py", grade: "actionable" as never, reason: "x" }),
+    ).rejects.toThrow(/grade/);
+  });
+
+  it("memoryList surfaces entries with lastApplied for hygiene", async () => {
+    const entries = await memoryList({ repo });
+    expect(entries.length).toBeGreaterThan(0);
+    expect(entries[0]).toHaveProperty("fp");
+    expect(entries[0]).toHaveProperty("reason");
   });
 });
 

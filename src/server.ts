@@ -3,6 +3,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
 import { astSearch } from "./astsearch.js";
+import { memoryList, remember } from "./memory.js";
 import { scan } from "./scan.js";
 
 const server = new McpServer({ name: "leveret", version: "0.1.0" });
@@ -53,6 +54,48 @@ server.registerTool(
   },
   async (args) => ({
     content: [{ type: "text", text: JSON.stringify(await astSearch(args), null, 1) }],
+  }),
+);
+
+server.registerTool(
+  "remember",
+  {
+    description:
+      "Persist a graded verdict to the repo's review memory (.leveret/memory.jsonl) so " +
+      "the finding class never re-surfaces ungraded. Grades: priced-noise (true but the " +
+      "repo prices fixing it at zero) or false-positive (the claim is wrong). Only drops " +
+      "are stored — actionable findings are reported, not remembered. Give anchorFile + " +
+      "anchorLine to pin an instance verdict to its source line: the memory dies when " +
+      "that line changes. Omit the anchor for a class-wide verdict (fp may use a glob).",
+    inputSchema: {
+      repo: z.string().describe("absolute path to the reviewed repo"),
+      fp: z.string().describe("fingerprint: engine/RULE/path-or-glob, e.g. shellcheck/SC2016/tests/**"),
+      grade: z.enum(["priced-noise", "false-positive"]),
+      reason: z.string().describe("why this class is priced or false — mandatory, auditable"),
+      author: z.string().optional().describe("who graded (agent id or human)"),
+      anchorFile: z.string().optional().describe("repo-relative file for an instance anchor"),
+      anchorLine: z.number().optional().describe("1-based line the verdict anchors to"),
+    },
+  },
+  async (args) => ({
+    content: [{ type: "text", text: JSON.stringify(await remember(args), null, 1) }],
+  }),
+);
+
+server.registerTool(
+  "memory",
+  {
+    description:
+      "List the repo's review-memory entries (fingerprint, grade, reason, created, " +
+      "lastApplied). Use lastApplied to spot dead pricing worth deleting, and repeated " +
+      "same-rule entries under one subtree as candidates for promotion to a glob memory " +
+      "or a .leveret.yml profile rule.",
+    inputSchema: {
+      repo: z.string().describe("absolute path to the reviewed repo"),
+    },
+  },
+  async (args) => ({
+    content: [{ type: "text", text: JSON.stringify(await memoryList(args), null, 1) }],
   }),
 );
 

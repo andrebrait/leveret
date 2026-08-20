@@ -2,6 +2,7 @@ import { join } from "node:path";
 import { ENGINES, which, type ScanContext } from "./engines/registry.js";
 import { run } from "./exec.js";
 import type { EngineReport, Finding, ScanResult } from "./findings.js";
+import { applyMemory } from "./memory.js";
 import { filterFindings, loadProfile, scopeFiles } from "./profile.js";
 
 export async function changedFiles(repo: string, base: string): Promise<string[]> {
@@ -52,7 +53,9 @@ export async function scan(opts: {
       }
     }),
   );
-  const { kept, suppressed } = filterFindings(profile, findings);
+  const { kept: afterProfile, suppressed: byProfile } = filterFindings(profile, findings);
+  const { kept, suppressed: byMemory } = await applyMemory(opts.repo, afterProfile);
+  const suppressed = [...byProfile, ...byMemory].sort((a, b) => a.rule.localeCompare(b.rule));
   kept.sort((a, b) => a.file.localeCompare(b.file) || a.line - b.line);
   reports.sort((a, b) => a.engine.localeCompare(b.engine));
   return { findings: kept, engines: reports, suppressed };
