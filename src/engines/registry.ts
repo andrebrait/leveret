@@ -8,6 +8,8 @@ export interface ScanContext {
   base?: string;
   /** this engine's profile-declared rule packs (semgrep configs, ast-grep sgconfig) */
   rules?: string[];
+  /** this engine's full profile block, for engine-specific keys (jscpd corpus) */
+  engineProfile?: { corpus?: string[]; minTokens?: number };
 }
 
 export interface Engine {
@@ -312,5 +314,86 @@ const astGrep: Engine = {
   },
 };
 
-export const ENGINES: Engine[] = [gitleaks, semgrep, shellcheck, ruff, actionlint, zizmor, osvScanner, astGrep];
+const typos: Engine = {
+  id: "typos",
+  bin: "typos",
+  select: (ctx) => ctx.files, // typos skips binaries on its own
+  async scan(ctx, selected) {
+    const r = await run("typos", ["--format", "json", ...selected], ctx.repo);
+    const findings = [];
+    for (const line of r.stdout.split("\n")) {
+      if (!line.trim()) continue;
+      const x = JSON.parse(line) as {
+        type: string;
+        path: string;
+        line_num: number;
+        typo: string;
+        corrections: string[];
+      };
+      if (x.type !== "typo") continue;
+      findings.push({
+        engine: "typos",
+        rule: "typo",
+        severity: "info" as Severity,
+        file: x.path,
+        line: x.line_num,
+        message: `"${x.typo}" -> "${x.corrections.join('", "')}"`,
+      });
+    }
+    return findings;
+  },
+};
+
+const jscpd: Engine = {
+  id: "jscpd",
+  bin: "jscpd",
+  // Duplication needs a corpus wider than the diff; the profile supplies it and
+  // thereby opts the repo in (whole-corpus runs cost real time).
+  select: (ctx) => (ctx.engineProfile?.corpus?.length ? ctx.files : []),
+  async scan(ctx, selected) {
+    const out = `${process.env.TMPDIR ?? "/tmp"}/leveret-jscpd-${process.pid}`;
+    const args = [
+      "--reporters",
+      "json",
+      "--output",
+      out,
+      "--silent",
+      "--min-tokens",
+      String(ctx.engineProfile?.minTokens ?? 50),
+    ];
+    for (const g of ctx.engineProfile?.corpus ?? []) args.push("--pattern", g);
+    const r = await run("jscpd", [...args, "."], ctx.repo);
+    if (r.code !== 0) throw new Error(`jscpd rc=${r.code}: ${r.stderr.slice(0, 300)}`);
+    const { readFile, rm } = await import("node:fs/promises");
+    const doc = JSON.parse(await readFile(`${out}/jscpd-report.json`, "utf8")) as {
+      duplicates: {
+        firstFile: { name: string; startLoc: { line: number }; endLoc: { line: number } };
+        secondFile: { name: string; startLoc: { line: number }; endLoc: { line: number } };
+      }[];
+    };
+    await rm(out, { recursive: true, force: true }).catch(() => {});
+    const changed = new Set(selected);
+    const findings = [];
+    for (const d of doc.duplicates) {
+      for (const [mine, other] of [
+        [d.firstFile, d.secondFile],
+        [d.secondFile, d.firstFile],
+      ] as const) {
+        if (!changed.has(mine.name)) continue;
+        findings.push({
+          engine: "jscpd",
+          rule: "duplication",
+          severity: "info" as Severity,
+          file: mine.name,
+          line: mine.startLoc.line,
+          endLine: mine.endLoc.line,
+          message: `duplicates ${other.name}:${other.startLoc.line}-${other.endLoc.line}`,
+        });
+      }
+    }
+    return findings;
+  },
+};
+
+export const ENGINES: Engine[] = [gitleaks, semgrep, shellcheck, ruff, actionlint, zizmor, osvScanner, astGrep, typos, jscpd];
 export { which };

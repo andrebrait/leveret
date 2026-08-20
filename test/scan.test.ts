@@ -70,7 +70,11 @@ describe("scan", () => {
 
   it("reports not-applicable engines and never fabricates findings for them", async () => {
     const result = await scan({ repo, files: ["base.txt"] });
-    for (const r of result.engines) expect(r.status).toBe("not-applicable");
+    // typos applies to any text file and comes back clean; everything else has
+    // nothing to select on a plain text file.
+    for (const r of result.engines) {
+      expect(r.status).toBe(r.engine === "typos" ? "clean" : "not-applicable");
+    }
     expect(result.findings).toEqual([]);
   });
 

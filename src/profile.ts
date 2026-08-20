@@ -14,6 +14,10 @@ export interface EngineProfile {
   severityFloor?: Severity;
   /** engine-specific rule packs: semgrep config files, ast-grep sgconfig */
   rules?: string[];
+  /** jscpd: repo-wide globs forming the duplication corpus; enables the engine */
+  corpus?: string[];
+  /** jscpd: duplication threshold (default 50) */
+  minTokens?: number;
 }
 
 export interface CustomEngineDef {

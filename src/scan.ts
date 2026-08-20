@@ -31,8 +31,9 @@ async function runEngines(
   await Promise.all(
     wanted.map(async (engine) => {
       // Rule packs resolve against the head repo: a base tree may predate them.
-      const rules = profile.engines[engine.id]?.rules?.map((r) => resolve(ctx.repo, r));
-      const ectx: ScanContext = { ...ctx, rules };
+      const engineProfile = profile.engines[engine.id];
+      const rules = engineProfile?.rules?.map((r) => resolve(ctx.repo, r));
+      const ectx: ScanContext = { ...ctx, rules, engineProfile };
       const selected = scopeFiles(profile, engine.id, engine.select(ectx));
       if (selected.length === 0) {
         reports?.push({ engine: engine.id, status: "not-applicable" });
