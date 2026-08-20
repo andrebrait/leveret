@@ -22,6 +22,18 @@ export interface MemoryEntry {
 }
 
 const memPath = (repo: string) => join(repo, ".leveret", "memory.jsonl");
+// Hygiene stamps live OUTSIDE the versioned verdict file: rewriting memory.jsonl on
+// every scan would churn a committed file with bookkeeping. applied.json is
+// regenerable bookkeeping — gitignore it.
+const appliedPath = (repo: string) => join(repo, ".leveret", "applied.json");
+
+async function readApplied(repo: string): Promise<Record<string, string>> {
+  try {
+    return JSON.parse(await readFile(appliedPath(repo), "utf8")) as Record<string, string>;
+  } catch {
+    return {};
+  }
+}
 
 const hashLine = (text: string) => createHash("sha256").update(text.trim()).digest("hex");
 
@@ -35,15 +47,21 @@ async function lineAt(repo: string, file: string, line: number): Promise<string 
 }
 
 export async function memoryList(opts: { repo: string }): Promise<MemoryEntry[]> {
+  let raw: string;
   try {
-    const raw = await readFile(memPath(opts.repo), "utf8");
-    return raw
-      .split("\n")
-      .filter((l) => l.trim())
-      .map((l) => JSON.parse(l) as MemoryEntry);
+    raw = await readFile(memPath(opts.repo), "utf8");
   } catch {
     return [];
   }
+  const applied = await readApplied(opts.repo);
+  return raw
+    .split("\n")
+    .filter((l) => l.trim())
+    .map((l) => {
+      const e = JSON.parse(l) as MemoryEntry;
+      if (applied[e.fp]) e.lastApplied = applied[e.fp];
+      return e;
+    });
 }
 
 export async function remember(opts: {
@@ -124,11 +142,9 @@ export async function applyMemory(
   }
   if (applied.size > 0) {
     const today = new Date().toISOString().slice(0, 10);
-    for (const e of applied) e.lastApplied = today;
-    await writeFile(
-      memPath(repo),
-      entries.map((e) => `${JSON.stringify(e)}\n`).join(""),
-    );
+    const stamps = await readApplied(repo);
+    for (const e of applied) stamps[e.fp] = today;
+    await writeFile(appliedPath(repo), `${JSON.stringify(stamps, null, 1)}\n`);
   }
   return { kept, suppressed: [...tally.values()] };
 }

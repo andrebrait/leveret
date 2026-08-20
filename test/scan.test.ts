@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, writeFileSync, mkdirSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { beforeAll, describe, expect, it } from "vitest";
@@ -178,6 +178,21 @@ describe("memory", () => {
     expect(entries.length).toBeGreaterThan(0);
     expect(entries[0]).toHaveProperty("fp");
     expect(entries[0]).toHaveProperty("reason");
+  });
+
+  it("verdict file stays append-only: lastApplied lives in the sidecar, not memory.jsonl", async () => {
+    rmSync(join(repo, ".leveret"), { recursive: true, force: true });
+    await remember({ repo, fp: "shellcheck/SC2086/**", grade: "priced-noise", reason: "fixture" });
+    const before = readFileSync(join(repo, ".leveret", "memory.jsonl"), "utf8");
+    const applied = await scan({ repo, files: ["bad.sh"], engines: ["shellcheck"] });
+    expect(applied.suppressed.some((s) => s.rule === "shellcheck/SC2086/**")).toBe(true);
+    // applying a memory must not rewrite the versioned verdict file
+    expect(readFileSync(join(repo, ".leveret", "memory.jsonl"), "utf8")).toBe(before);
+    expect(before).not.toContain("lastApplied");
+    // ...but the hygiene stamp still surfaces through memoryList, from the sidecar
+    const entry = (await memoryList({ repo })).find((e) => e.fp === "shellcheck/SC2086/**");
+    expect(entry?.lastApplied).toBeDefined();
+    expect(existsSync(join(repo, ".leveret", "applied.json"))).toBe(true);
   });
 });
 
