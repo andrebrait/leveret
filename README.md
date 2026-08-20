@@ -17,16 +17,22 @@ Pipeline the project targets:
 
 ## Tools
 
-- **scan** `{repo, base? | files?, engines?}` — runs the engines applicable to the change
-  set and returns normalized findings (`engine, rule, severity, file, line, message`)
-  plus a per-engine status report (`findings | clean | not-applicable | missing | error`).
+- **scan** `{repo, base? | files?, engines?, delta?}` — runs the engines applicable to
+  the change set and returns normalized findings (`engine, rule, severity, file, line,
+  message, provenance`) plus a per-engine status report. With a base ref the scan is
+  **delta by default**: findings already present at the base tree are dropped as
+  pre-existing (counted, never silent) and survivors are tagged `introduced`.
   Engines: semgrep (registry security + per-language rulesets), gitleaks (secrets over
   `base..HEAD` commits), shellcheck, ruff, actionlint, zizmor (workflow security),
-  osv-scanner (lockfile CVEs), and profile-declared custom semgrep/ast-grep rule packs. Findings are review *leads*, not
-  verdicts.
+  osv-scanner (lockfile CVEs), typos (spelling), jscpd (profile-gated duplication),
+  profile-declared semgrep/ast-grep rule packs, and arbitrary SARIF-emitting commands
+  via `custom:` profile entries ([recipes](docs/recipes.md): psalm taint, hadolint,
+  trivy, ...). Findings are review *leads*, not verdicts.
 - **ast_search** `{repo, pattern, lang, paths?}` — structural pattern matching via
   ast-grep (metavariables, syntax-aware), for call-site-shaped questions text grep
   gets wrong.
+- **context** `{repo, files}` — prioritization signal, not findings: per-function
+  cyclomatic complexity (lizard), 12-month churn, last-touched date.
 
 ## Run
 

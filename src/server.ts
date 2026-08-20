@@ -3,6 +3,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
 import { astSearch } from "./astsearch.js";
+import { context } from "./context.js";
 import { memoryList, remember } from "./memory.js";
 import { scan } from "./scan.js";
 
@@ -54,6 +55,24 @@ server.registerTool(
   },
   async (args) => ({
     content: [{ type: "text", text: JSON.stringify(await astSearch(args), null, 1) }],
+  }),
+);
+
+server.registerTool(
+  "context",
+  {
+    description:
+      "Prioritization context for reviewing a change — NOT findings: per-function " +
+      "cyclomatic complexity (lizard, multi-language), 12-month git churn, and " +
+      "last-touched date per file. High complexity in a high-churn file deserves the " +
+      "deepest review; use this to decide where to dig before reading code.",
+    inputSchema: {
+      repo: z.string().describe("absolute path to the repo"),
+      files: z.array(z.string()).describe("repo-relative files to profile"),
+    },
+  },
+  async (args) => ({
+    content: [{ type: "text", text: JSON.stringify(await context(args), null, 1) }],
   }),
 );
 
