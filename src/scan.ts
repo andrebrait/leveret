@@ -1,5 +1,6 @@
 import { existsSync, realpathSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { join, matchesGlob, resolve } from "node:path";
+import { parseSarif } from "./sarif.js";
 import { baseFindingKeys, findingKey } from "./delta.js";
 import { ENGINES, which, type Engine, type ScanContext } from "./engines/registry.js";
 import { run } from "./exec.js";
@@ -37,7 +38,8 @@ async function runEngines(
         reports?.push({ engine: engine.id, status: "not-applicable" });
         return;
       }
-      if (!(await which(engine.bin))) {
+      // custom engines may name a repo-local script rather than a PATH binary
+      if (!(await which(engine.bin)) && !existsSync(join(ctx.repo, engine.bin))) {
         reports?.push({ engine: engine.id, status: "missing", detail: `${engine.bin} not on PATH` });
         return;
       }
@@ -78,7 +80,18 @@ export async function scan(opts: {
   const profile = await loadProfile(
     opts.profilePath ? resolve(opts.profilePath) : join(opts.repo, ".leveret.yml"),
   );
-  const wanted = ENGINES.filter((e) => !opts.engines || opts.engines.includes(e.id));
+  const custom: Engine[] = profile.custom.map((def) => ({
+    id: def.id,
+    bin: def.command[0]!,
+    select: (ctx) => ctx.files.filter((f) => def.files.some((g) => matchesGlob(f, g))),
+    scan: async (ctx, selected) => {
+      const r = await run(def.command[0]!, [...def.command.slice(1), ...selected], ctx.repo);
+      return parseSarif(def.id, r.stdout);
+    },
+  }));
+  const wanted = [...ENGINES, ...custom].filter(
+    (e) => !opts.engines || opts.engines.includes(e.id),
+  );
 
   const reports: EngineReport[] = [];
   const findings = await runEngines({ repo: opts.repo, files, base: opts.base }, profile, wanted, reports);

@@ -16,9 +16,17 @@ export interface EngineProfile {
   rules?: string[];
 }
 
+export interface CustomEngineDef {
+  id: string;
+  /** argv; selected files are appended; SARIF 2.1.0 expected on stdout */
+  command: string[];
+  files: string[];
+}
+
 export interface Profile {
   engines: Record<string, EngineProfile>;
   suppress: SuppressEntry[];
+  custom: CustomEngineDef[];
 }
 
 export interface Suppression {
@@ -27,7 +35,7 @@ export interface Suppression {
   reason: string;
 }
 
-const EMPTY: Profile = { engines: {}, suppress: [] };
+const EMPTY: Profile = { engines: {}, suppress: [], custom: [] };
 const SEV_ORDER: Record<Severity, number> = { info: 0, warning: 1, error: 2 };
 
 export async function loadProfile(path: string): Promise<Profile> {
@@ -40,6 +48,7 @@ export async function loadProfile(path: string): Promise<Profile> {
   const doc = (parse(raw) ?? {}) as {
     engines?: Record<string, EngineProfile>;
     suppress?: Partial<SuppressEntry>[];
+    custom?: Partial<CustomEngineDef>[];
   };
   const suppress = (doc.suppress ?? []).map((s) => {
     if (!s.rule) throw new Error(`profile ${path}: suppress entry missing rule`);
@@ -47,7 +56,13 @@ export async function loadProfile(path: string): Promise<Profile> {
     if (!s.reason) throw new Error(`profile ${path}: suppress ${s.rule} missing reason`);
     return { rule: s.rule, paths: s.paths, reason: s.reason };
   });
-  return { engines: doc.engines ?? {}, suppress };
+  const custom = (doc.custom ?? []).map((c) => {
+    if (!c.id || !c.command?.length || !c.files?.length) {
+      throw new Error(`profile ${path}: custom engine needs id, command and files`);
+    }
+    return { id: c.id, command: c.command, files: c.files };
+  });
+  return { engines: doc.engines ?? {}, suppress, custom };
 }
 
 /** Pre-run scope filter: files an engine may see under this profile. */
