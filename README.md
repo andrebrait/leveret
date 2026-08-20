@@ -39,10 +39,6 @@ claude mcp add warren -- node /Users/andre/git/warren/dist/server.js
 
 ## Status / roadmap
 
-- [x] Deterministic first pass (5 engines) + ast-grep, normalized output, MCP surface
-- [ ] Engine additions: osv-scanner (deps), zizmor (workflow security), phpstan/phpcs
-      via project-local configs, custom ast-grep rule packs
-- [ ] Review-agent + verification-agent harness (prompt contracts)
-- [ ] Benchmark: replay historical pfBlockerNG PRs with accepted CodeRabbit findings;
-      measure recall + false-positive rate
-- [ ] Adoption decision (pfBlockerNG issue #2599, parked until benchmark passes)
+See [DESIGN.md](DESIGN.md) — architecture, the three-grade filter (actionable /
+priced-noise / false-positive), the in-repo memory store, agent prompt contracts,
+and the validation benchmark gating adoption.
