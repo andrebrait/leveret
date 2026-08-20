@@ -196,6 +196,72 @@ describe("memory", () => {
   });
 });
 
+describe("P4 engines", () => {
+  it("zizmor flags the unpinned-credentials checkout in the workflow", async () => {
+    writeFileSync(join(repo, ".leveret.yml"), "# empty profile\n");
+    rmSync(join(repo, ".leveret"), { recursive: true, force: true });
+    writeFileSync(
+      join(repo, ".github/workflows/ci.yml"),
+      "on: push\njobs:\n  a:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n      - run: echo hi\n",
+    );
+    const result = await scan({ repo, files: [".github/workflows/ci.yml"], engines: ["zizmor"] });
+    const finding = result.findings.find((f) => f.rule === "artipacked");
+    expect(finding).toMatchObject({ engine: "zizmor", file: ".github/workflows/ci.yml", line: 6 });
+  });
+
+  it("osv-scanner reports known CVEs from a lockfile", async () => {
+    writeFileSync(
+      join(repo, "package-lock.json"),
+      JSON.stringify({
+        name: "x",
+        version: "1.0.0",
+        lockfileVersion: 3,
+        requires: true,
+        packages: {
+          "": { name: "x", version: "1.0.0", dependencies: { lodash: "4.17.15" } },
+          "node_modules/lodash": { version: "4.17.15" },
+        },
+      }),
+    );
+    const result = await scan({ repo, files: ["package-lock.json"], engines: ["osv-scanner"] });
+    expect(result.findings.some((f) => f.engine === "osv-scanner" && /GHSA-|CVE-/.test(f.rule))).toBe(
+      true,
+    );
+    expect(result.findings[0]!.message).toMatch(/lodash@4\.17\.15/);
+  });
+
+  it("profile-declared custom semgrep rules surface with their own rule id", async () => {
+    mkdirSync(join(repo, "rules"), { recursive: true });
+    writeFileSync(
+      join(repo, "rules/no-eval.yml"),
+      "rules:\n  - id: leveret-no-eval\n    languages: [python]\n    severity: WARNING\n    message: eval is dangerous\n    pattern: eval(...)\n",
+    );
+    writeFileSync(join(repo, "bad2.py"), "y = eval('2+2')\n");
+    writeFileSync(join(repo, ".leveret.yml"), 'engines:\n  semgrep:\n    rules: ["rules/no-eval.yml"]\n');
+    const result = await scan({ repo, files: ["bad2.py"], engines: ["semgrep"] });
+    expect(result.findings.some((f) => f.rule.endsWith("leveret-no-eval"))).toBe(true);
+  });
+
+  it("profile-declared ast-grep rule packs run as their own engine", async () => {
+    mkdirSync(join(repo, "sgrules"), { recursive: true });
+    writeFileSync(
+      join(repo, "sgrules/no-eval.yml"),
+      "id: sg-no-eval\nlanguage: python\nseverity: warning\nmessage: eval is dangerous\nrule:\n  pattern: eval($X)\n",
+    );
+    writeFileSync(join(repo, "sgconfig.yml"), 'ruleDirs: ["sgrules"]\n');
+    writeFileSync(join(repo, ".leveret.yml"), 'engines:\n  ast-grep:\n    rules: ["sgconfig.yml"]\n');
+    const result = await scan({ repo, files: ["bad2.py"], engines: ["ast-grep"] });
+    const finding = result.findings.find((f) => f.rule === "sg-no-eval");
+    expect(finding).toMatchObject({ engine: "ast-grep", file: "bad2.py", severity: "warning" });
+  });
+
+  it("without a rule pack the ast-grep engine is not applicable", async () => {
+    writeFileSync(join(repo, ".leveret.yml"), "# empty profile\n");
+    const result = await scan({ repo, files: ["bad2.py"], engines: ["ast-grep"] });
+    expect(result.engines).toEqual([{ engine: "ast-grep", status: "not-applicable" }]);
+  });
+});
+
 describe("ast_search", () => {
   it("matches structurally, 1-based lines", async () => {
     const matches = await astSearch({ repo, pattern: "cat $F", lang: "bash", paths: ["bad.sh"] });

@@ -9,8 +9,15 @@ export interface SuppressEntry {
   reason: string;
 }
 
+export interface EngineProfile {
+  paths?: string[];
+  severityFloor?: Severity;
+  /** engine-specific rule packs: semgrep config files, ast-grep sgconfig */
+  rules?: string[];
+}
+
 export interface Profile {
-  engines: Record<string, { paths?: string[]; severityFloor?: Severity }>;
+  engines: Record<string, EngineProfile>;
   suppress: SuppressEntry[];
 }
 
@@ -31,7 +38,7 @@ export async function loadProfile(path: string): Promise<Profile> {
     return EMPTY;
   }
   const doc = (parse(raw) ?? {}) as {
-    engines?: Record<string, { paths?: string[]; severityFloor?: Severity }>;
+    engines?: Record<string, EngineProfile>;
     suppress?: Partial<SuppressEntry>[];
   };
   const suppress = (doc.suppress ?? []).map((s) => {

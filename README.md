@@ -21,7 +21,8 @@ Pipeline the project targets:
   set and returns normalized findings (`engine, rule, severity, file, line, message`)
   plus a per-engine status report (`findings | clean | not-applicable | missing | error`).
   Engines: semgrep (registry security + per-language rulesets), gitleaks (secrets over
-  `base..HEAD` commits), shellcheck, ruff, actionlint. Findings are review *leads*, not
+  `base..HEAD` commits), shellcheck, ruff, actionlint, zizmor (workflow security),
+  osv-scanner (lockfile CVEs), and profile-declared custom semgrep/ast-grep rule packs. Findings are review *leads*, not
   verdicts.
 - **ast_search** `{repo, pattern, lang, paths?}` — structural pattern matching via
   ast-grep (metavariables, syntax-aware), for call-site-shaped questions text grep

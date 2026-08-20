@@ -167,7 +167,7 @@ treats subscription OAuth as a peer of the API key, never an afterthought.
       suppressions, suppression reporting
 - [x] **P3** — memory store, fingerprints + anchors, `remember` + `memory` tools,
       auto-apply in `scan`, promotion candidates
-- [ ] **P4** — engine additions: osv-scanner (dependency CVEs), zizmor (workflow
+- [x] **P4** — engine additions: osv-scanner (dependency CVEs), zizmor (workflow
       security), project-local phpstan/phpcs, custom ast-grep rule packs
 - [ ] **P5** — review + verification agent prompt contracts
 - [ ] **P6** — benchmark, then the adoption decision

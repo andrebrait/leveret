@@ -6,6 +6,8 @@ export interface ScanContext {
   files: string[];
   /** git range base (e.g. "origin/devel"); only range-aware engines use it */
   base?: string;
+  /** this engine's profile-declared rule packs (semgrep configs, ast-grep sgconfig) */
+  rules?: string[];
 }
 
 export interface Engine {
@@ -38,6 +40,7 @@ const semgrep: Engine = {
     }
     const args = ["scan", "--json", "--metrics=off", "--quiet"];
     for (const c of configs) args.push("--config", c);
+    for (const r of ctx.rules ?? []) args.push("--config", r);
     const r = await run("semgrep", [...args, ...selected], ctx.repo);
     const doc = JSON.parse(r.stdout) as {
       results: {
@@ -182,5 +185,132 @@ const gitleaks: Engine = {
   },
 };
 
-export const ENGINES: Engine[] = [gitleaks, semgrep, shellcheck, ruff, actionlint];
+const zizmor: Engine = {
+  id: "zizmor",
+  bin: "zizmor",
+  select: (ctx) =>
+    ctx.files.filter((f) => f.startsWith(".github/workflows/") && ["yml", "yaml"].includes(ext(f))),
+  async scan(ctx, selected) {
+    const r = await run("zizmor", ["--format", "json", ...selected], ctx.repo);
+    const doc = JSON.parse(r.stdout) as {
+      ident: string;
+      desc: string;
+      determinations: { severity: string };
+      locations: {
+        symbolic: {
+          key: { Local?: { verbatim_path: string } };
+          annotation?: string;
+          kind: string;
+        };
+        concrete?: { location: { start_point: { row: number } } };
+      }[];
+    }[];
+    return doc.map((x) => {
+      const loc = x.locations.find((l) => l.symbolic.kind === "Primary") ?? x.locations[0];
+      return {
+        engine: "zizmor",
+        rule: x.ident,
+        severity: sev(x.determinations.severity, {
+          high: "error",
+          medium: "warning",
+          low: "info",
+          informational: "info",
+          unknown: "warning",
+        }),
+        file: loc?.symbolic.key.Local?.verbatim_path ?? selected[0]!,
+        line: (loc?.concrete?.location.start_point.row ?? 0) + 1, // rows are 0-based
+        message: `${x.desc}${loc?.symbolic.annotation ? `: ${loc.symbolic.annotation}` : ""}`,
+      };
+    });
+  },
+};
+
+const OSV_MANIFESTS = new Set([
+  "package-lock.json",
+  "pnpm-lock.yaml",
+  "yarn.lock",
+  "uv.lock",
+  "poetry.lock",
+  "requirements.txt",
+  "composer.lock",
+  "go.mod",
+  "Cargo.lock",
+  "Gemfile.lock",
+]);
+
+const osvScanner: Engine = {
+  id: "osv-scanner",
+  bin: "osv-scanner",
+  select: (ctx) => ctx.files.filter((f) => OSV_MANIFESTS.has(f.split("/").pop() ?? "")),
+  async scan(ctx, selected) {
+    const args = ["scan", "--format", "json"];
+    for (const f of selected) args.push("-L", f);
+    const r = await run("osv-scanner", args, ctx.repo);
+    const doc = JSON.parse(r.stdout) as {
+      results?: {
+        source: { path: string };
+        packages: {
+          package: { name: string; version: string };
+          vulnerabilities: { id: string; summary?: string }[];
+        }[];
+      }[];
+    };
+    const findings = [];
+    for (const res of doc.results ?? []) {
+      // osv reports absolute source paths; findings stay repo-relative
+      const file = res.source.path.startsWith(`${ctx.repo}/`)
+        ? res.source.path.slice(ctx.repo.length + 1)
+        : res.source.path;
+      for (const p of res.packages) {
+        for (const v of p.vulnerabilities) {
+          findings.push({
+            engine: "osv-scanner",
+            rule: v.id,
+            severity: "warning" as Severity,
+            file,
+            line: 1, // lockfiles have no meaningful line for a dependency
+            message: `${p.package.name}@${p.package.version}: ${v.summary ?? v.id}`,
+          });
+        }
+      }
+    }
+    return findings;
+  },
+};
+
+const astGrep: Engine = {
+  id: "ast-grep",
+  bin: "ast-grep",
+  // Runs only when the profile declares a rule pack; without one there is nothing to match.
+  select: (ctx) => (ctx.rules?.length ? ctx.files : []),
+  async scan(ctx, selected) {
+    const findings = [];
+    for (const config of ctx.rules ?? []) {
+      const r = await run("ast-grep", ["scan", "--config", config, "--json", ...selected], ctx.repo);
+      const doc = JSON.parse(r.stdout) as {
+        ruleId: string;
+        severity: string;
+        message: string;
+        file: string;
+        lines: string;
+        range: { start: { line: number }; end: { line: number } };
+      }[];
+      for (const x of doc) {
+        findings.push({
+          engine: "ast-grep",
+          rule: x.ruleId,
+          severity: sev(x.severity, { error: "error", warning: "warning", info: "info", hint: "info" }),
+          file: x.file,
+          line: x.range.start.line + 1, // lines are 0-based
+          endLine: x.range.end.line + 1,
+          message: x.message,
+          snippet: x.lines,
+        });
+      }
+    }
+    return findings;
+  },
+};
+
+export const ENGINES: Engine[] = [gitleaks, semgrep, shellcheck, ruff, actionlint, zizmor, osvScanner, astGrep];
 export { which };

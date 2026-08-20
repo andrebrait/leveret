@@ -35,7 +35,8 @@ export async function scan(opts: {
   const reports: EngineReport[] = [];
   await Promise.all(
     wanted.map(async (engine) => {
-      const selected = scopeFiles(profile, engine.id, engine.select(ctx));
+      const ectx: ScanContext = { ...ctx, rules: profile.engines[engine.id]?.rules };
+      const selected = scopeFiles(profile, engine.id, engine.select(ectx));
       if (selected.length === 0) {
         reports.push({ engine: engine.id, status: "not-applicable" });
         return;
@@ -45,7 +46,7 @@ export async function scan(opts: {
         return;
       }
       try {
-        const found = await engine.scan(ctx, selected);
+        const found = await engine.scan(ectx, selected);
         findings.push(...found);
         reports.push({ engine: engine.id, status: found.length > 0 ? "findings" : "clean" });
       } catch (err) {
