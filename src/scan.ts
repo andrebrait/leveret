@@ -1,6 +1,8 @@
+import { join } from "node:path";
 import { ENGINES, which, type ScanContext } from "./engines/registry.js";
 import { run } from "./exec.js";
 import type { EngineReport, Finding, ScanResult } from "./findings.js";
+import { filterFindings, loadProfile, scopeFiles } from "./profile.js";
 
 export async function changedFiles(repo: string, base: string): Promise<string[]> {
   // ACMR: deletions have nothing to scan. -z survives any file name.
@@ -18,11 +20,13 @@ export async function scan(opts: {
   base?: string;
   files?: string[];
   engines?: string[];
+  profilePath?: string;
 }): Promise<ScanResult> {
   const files = opts.files ?? (opts.base ? await changedFiles(opts.repo, opts.base) : []);
   if (files.length === 0 && !opts.files) {
     throw new Error("scan needs either files[] or a base ref with changes");
   }
+  const profile = await loadProfile(opts.profilePath ?? join(opts.repo, ".leveret.yml"));
   const ctx: ScanContext = { repo: opts.repo, files, base: opts.base };
   const wanted = ENGINES.filter((e) => !opts.engines || opts.engines.includes(e.id));
 
@@ -30,7 +34,7 @@ export async function scan(opts: {
   const reports: EngineReport[] = [];
   await Promise.all(
     wanted.map(async (engine) => {
-      const selected = engine.select(ctx);
+      const selected = scopeFiles(profile, engine.id, engine.select(ctx));
       if (selected.length === 0) {
         reports.push({ engine: engine.id, status: "not-applicable" });
         return;
@@ -48,7 +52,8 @@ export async function scan(opts: {
       }
     }),
   );
-  findings.sort((a, b) => a.file.localeCompare(b.file) || a.line - b.line);
+  const { kept, suppressed } = filterFindings(profile, findings);
+  kept.sort((a, b) => a.file.localeCompare(b.file) || a.line - b.line);
   reports.sort((a, b) => a.engine.localeCompare(b.engine));
-  return { findings, engines: reports };
+  return { findings: kept, engines: reports, suppressed };
 }

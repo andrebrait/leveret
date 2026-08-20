@@ -15,7 +15,9 @@ server.registerTool(
       "shellcheck, ruff, actionlint) over a change set and return normalized findings. " +
       "Findings are review LEADS, not verdicts: validate each against current code. " +
       "Give either base (git ref; scans base...HEAD changed files, secrets over base..HEAD " +
-      "commits) or an explicit files list (repo-relative).",
+      "commits) or an explicit files list (repo-relative). A .leveret.yml profile in the " +
+      "repo (or profilePath) scopes engines by path and suppresses priced rules; " +
+      "suppressions come back tallied with their reasons, never silently.",
     inputSchema: {
       repo: z.string().describe("absolute path to the git repo / worktree to scan"),
       base: z.string().optional().describe("git base ref, e.g. origin/devel"),
@@ -24,6 +26,10 @@ server.registerTool(
         .array(z.string())
         .optional()
         .describe("restrict to these engine ids (default: all applicable)"),
+      profilePath: z
+        .string()
+        .optional()
+        .describe("profile file overriding <repo>/.leveret.yml"),
     },
   },
   async (args) => ({

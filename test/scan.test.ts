@@ -78,6 +78,48 @@ describe("scan", () => {
   });
 });
 
+describe("profile", () => {
+  const profile = `
+engines:
+  shellcheck:
+    paths: ["scripts/**"]
+suppress:
+  - rule: ruff/F821
+    reason: fixture plants an undefined name on purpose
+`;
+
+  it("scopes engines by path and suppresses rules with a reported reason", async () => {
+    writeFileSync(join(repo, ".leveret.yml"), profile);
+    const result = await scan({ repo, base: "base" });
+    // bad.sh sits at the repo root, outside shellcheck's scoped paths
+    expect(result.findings.filter((f) => f.engine === "shellcheck")).toEqual([]);
+    // ruff still ran, but F821 is suppressed and the suppression is reported
+    expect(result.findings.filter((f) => f.rule === "F821")).toEqual([]);
+    const sup = result.suppressed.find((s) => s.rule === "ruff/F821");
+    expect(sup).toMatchObject({
+      count: 1,
+      reason: "fixture plants an undefined name on purpose",
+    });
+    // untouched engines keep their findings
+    expect(result.findings.some((f) => f.engine === "gitleaks")).toBe(true);
+  });
+
+  it("explicit profilePath overrides the in-repo default", async () => {
+    const alt = join(tmpdir(), `leveret-profile-${process.pid}.yml`);
+    writeFileSync(alt, "suppress:\n  - rule: shellcheck/SC2086\n    reason: alt profile\n");
+    const result = await scan({ repo, base: "base", profilePath: alt });
+    expect(result.findings.some((f) => f.rule === "SC2086")).toBe(false);
+    expect(result.suppressed.find((s) => s.rule === "shellcheck/SC2086")?.reason).toBe(
+      "alt profile",
+    );
+  });
+
+  it("a suppress entry without a reason is a config error, not a silent drop", async () => {
+    writeFileSync(join(repo, ".leveret.yml"), "suppress:\n  - rule: ruff/F821\n");
+    await expect(scan({ repo, base: "base" })).rejects.toThrow(/reason/);
+  });
+});
+
 describe("ast_search", () => {
   it("matches structurally, 1-based lines", async () => {
     const matches = await astSearch({ repo, pattern: "cat $F", lang: "bash", paths: ["bad.sh"] });

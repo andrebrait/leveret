@@ -22,4 +22,6 @@ export interface EngineReport {
 export interface ScanResult {
   findings: Finding[];
   engines: EngineReport[];
+  /** profile-dropped findings, tallied per rule with the profile's reason — never silent */
+  suppressed: { rule: string; count: number; reason: string }[];
 }
