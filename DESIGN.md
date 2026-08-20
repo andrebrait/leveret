@@ -148,6 +148,11 @@ through BOTH auth paths:
 
 - **Anthropic Claude** — API key, and OAuth for Claude Pro/Max subscriptions.
 - **OpenAI** — API key, and OAuth for ChatGPT subscriptions.
+- **Local models** — llama.cpp (`llama-server`), Ollama, vLLM, LM Studio and kin, which
+  all speak the OpenAI-compatible API. This falls out of the OpenAI path done right:
+  the base URL is configurable and the API key optional — a hardcoded
+  `api.openai.com` or a mandatory key would silently exclude every local backend.
+  Fully-offline review (the self-hosted pitch) depends on this path.
 
 Practical consequence for P5: the agent contracts must run unmodified under a client
 authenticated either way (e.g. Claude Code under a Max subscription or an API key;
