@@ -38,7 +38,9 @@ beforeAll(() => {
   writeFileSync(join(repo, "bad.py"), "print(undefined_name)\n");
   // gitleaks: fabricated token matching the github-pat pattern (not a real credential;
   // AWS's documented AKIA...EXAMPLE key is on gitleaks' default allowlist, so it
-  // cannot serve as the plant)
+  // cannot serve as the plant). Assembled at runtime so the contiguous pattern never
+  // exists in THIS repo's tree — GitHub push protection and gitleaks-on-leveret would
+  // both flag a literal.
   writeFileSync(join(repo, "leak.txt"), ["ghp", "_wWPw5k4aXcaT4fNP0UcnZwJUVFk6LO0pINUx\n"].join(""));
   // actionlint: unknown runner label
   mkdirSync(join(repo, ".github/workflows"), { recursive: true });
