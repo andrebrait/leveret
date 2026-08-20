@@ -49,4 +49,4 @@ and the validation benchmark gating adoption.
 
 ## License
 
-[AGPL-3.0-only](LICENSE).
+[AGPL-3.0-or-later](LICENSE).

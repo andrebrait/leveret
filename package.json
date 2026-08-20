@@ -11,7 +11,7 @@
     "dev": "tsx src/server.ts",
     "test": "vitest run"
   },
-  "license": "AGPL-3.0-only",
+  "license": "AGPL-3.0-or-later",
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.30.0",
     "yaml": "^2.9.0",
