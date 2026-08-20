@@ -142,7 +142,7 @@ const gitleaks: Engine = {
   // Range engine: scans commits base..HEAD, so any non-empty change set applies.
   select: (ctx) => (ctx.base && ctx.files.length > 0 ? ctx.files : []),
   async scan(ctx) {
-    const report = `${process.env.TMPDIR ?? "/tmp"}/opencr-gitleaks-${process.pid}.json`;
+    const report = `${process.env.TMPDIR ?? "/tmp"}/leveret-gitleaks-${process.pid}.json`;
     const r = await run(
       "gitleaks",
       [

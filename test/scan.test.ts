@@ -25,7 +25,7 @@ const git = (args: string[]) =>
   });
 
 beforeAll(() => {
-  repo = mkdtempSync(join(tmpdir(), "opencr-test-"));
+  repo = mkdtempSync(join(tmpdir(), "leveret-test-"));
   execFileSync("git", ["init", "-b", "main"], { cwd: repo });
   writeFileSync(join(repo, "base.txt"), "clean\n");
   git(["add", "."]);

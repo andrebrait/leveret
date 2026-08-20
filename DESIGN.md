@@ -1,8 +1,8 @@
-# OpenCR — design
+# leveret — design
 
 Goal: a production-grade replacement for CodeRabbit's review capability, built as
 composable layers an agent (Claude Code or any MCP client) drives, instead of a hosted
-black box. The benchmark for "works" is defined at the bottom; until it passes, OpenCR
+black box. The benchmark for "works" is defined at the bottom; until it passes, leveret
 changes nothing in the repos it reviews.
 
 ## Why CodeRabbit catches more than a naive LLM reviewer
@@ -18,9 +18,9 @@ From its published architecture, four pillars matter:
 4. **Memory** — learnings per PR thread, per repo, and per organization suppress
    re-raising what was already priced and encode repo conventions.
 
-OpenCR replicates each pillar with local, inspectable pieces:
+leveret replicates each pillar with local, inspectable pieces:
 
-| Pillar | OpenCR component |
+| Pillar | leveret component |
 | --- | --- |
 | Deterministic first pass | engine registry behind the `scan` MCP tool |
 | Code graph | CodeGraph MCP (already indexed per worktree) — composed by the agent, not wrapped |
@@ -57,7 +57,7 @@ Every lead ends in exactly one grade:
 Three layers assign grades, cheapest first; each layer only passes down what it
 cannot decide:
 
-1. **Profile (deterministic, per repo)** — `.opencr.yml` in the target repo:
+1. **Profile (deterministic, per repo)** — `.leveret.yml` in the target repo:
    per-engine path scopes (e.g. shellcheck only under `src/`, `scripts/`), severity
    floors, rule suppressions — each entry carrying a `reason:`. Kills whole noise
    classes for free. Suppressions are never silent: `scan` reports counts of what the
@@ -75,7 +75,7 @@ cannot decide:
 ## Memory design
 
 Repo-scope memory lives **in the reviewed repo**, versioned and reviewable —
-`.opencr/memory.jsonl`, one entry per graded finding class:
+`.leveret/memory.jsonl`, one entry per graded finding class:
 
 ```json
 {"fp": "shellcheck/SC2016/tests/shell/**", "grade": "false-positive",
@@ -112,7 +112,7 @@ Repo-scope memory lives **in the reviewed repo**, versioned and reviewable —
 - `memory {repo, query?}` — list/inspect entries, surface promotion candidates.
 
 Deliberately not wrapped: code-graph queries (CodeGraph MCP exists), LSP diagnostics
-(client surface), shell probes (the driving agent already executes commands — OpenCR
+(client surface), shell probes (the driving agent already executes commands — leveret
 never needs its own sandbox because the agent *is* the sandbox).
 
 ## Agent pipeline
@@ -138,13 +138,13 @@ never needs its own sandbox because the agent *is* the sandbox).
   generous, publication is strict — is what keeps the output trustworthy.
 
 Both are prompt contracts (files in `agents/`), executable by any client that can
-spawn read-only subagents; OpenCR ships the contracts, not an orchestrator.
+spawn read-only subagents; leveret ships the contracts, not an orchestrator.
 
 ## Roadmap
 
 - [x] **P1** — engine registry (semgrep, gitleaks, shellcheck, ruff, actionlint),
       normalized findings, MCP `scan` + `ast_search`, integration tests
-- [ ] **P2** — `.opencr.yml` profiles: path scopes, severity floors, reasoned
+- [ ] **P2** — `.leveret.yml` profiles: path scopes, severity floors, reasoned
       suppressions, suppression reporting
 - [ ] **P3** — memory store, fingerprints + anchors, `remember` + `memory` tools,
       auto-apply in `scan`, promotion candidates

@@ -1,10 +1,10 @@
 {
-  "name": "opencr",
+  "name": "leveret",
   "version": "0.1.0",
-  "description": "Open Code Review — self-hosted, hybrid engine for private code reviews: per-change static-analysis engine selection, normalized findings, graded filtering, over MCP.",
+  "description": "leveret — self-hosted, hybrid engine for private code reviews: per-change static-analysis engine selection, normalized findings, graded filtering, over MCP.",
   "type": "module",
   "bin": {
-    "opencr": "dist/server.js"
+    "leveret": "dist/server.js"
   },
   "scripts": {
     "build": "tsc",
