@@ -46,3 +46,7 @@ claude mcp add leveret -- node /Users/andre/git/leveret/dist/server.js
 See [DESIGN.md](DESIGN.md) — architecture, the three-grade filter (actionable /
 priced-noise / false-positive), the in-repo memory store, agent prompt contracts,
 and the validation benchmark gating adoption.
+
+## License
+
+[AGPL-3.0-only](LICENSE).
