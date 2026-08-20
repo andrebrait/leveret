@@ -1,13 +1,17 @@
-# warren
+# OpenCR — Open Code Review
 
-Prototype of a hybrid, agent-driven code-review backend — the deterministic layer of a
-CodeRabbit replacement. An MCP server exposes normalized static analysis to a reviewing
-agent, which composes it with a code graph (CodeGraph MCP) and LSP diagnostics.
+The self-hosted, hybrid engine for private code reviews.
 
-Pipeline the prototype targets:
+OpenCR is a local-first alternative to hosted AI review bots: deterministic static
+analysis, AST-level search, and a graded filtering pipeline exposed over MCP, driven
+by whatever reviewing agent you bring (BYOM — Claude Code, a local model via any
+MCP-capable client, or a CI runner). Your code never leaves the burrow unless you
+choose the provider that takes it there.
+
+Pipeline the project targets:
 
 ```
-[diff] → [deterministic first pass: warren scan] → [review agent: leads → concerns]
+[diff] → [deterministic first pass: opencr scan] → [review agent: leads → concerns]
        → [verification agent: refute-or-evidence filter] → [report]
 ```
 
@@ -34,7 +38,7 @@ npm test                     # integration tests (need semgrep, gitleaks, shellc
 Claude Code registration:
 
 ```sh
-claude mcp add warren -- node /Users/andre/git/warren/dist/server.js
+claude mcp add opencr -- node /Users/andre/git/opencr/dist/server.js
 ```
 
 ## Status / roadmap

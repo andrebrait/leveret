@@ -5,7 +5,7 @@ import { z } from "zod";
 import { astSearch } from "./astsearch.js";
 import { scan } from "./scan.js";
 
-const server = new McpServer({ name: "warren", version: "0.1.0" });
+const server = new McpServer({ name: "opencr", version: "0.1.0" });
 
 server.registerTool(
   "scan",

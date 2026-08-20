@@ -1,10 +1,10 @@
 {
-  "name": "warren",
+  "name": "opencr",
   "version": "0.1.0",
-  "description": "Hybrid static-analysis MCP server for agent-driven code review: per-change engine selection, normalized findings.",
+  "description": "Open Code Review — self-hosted, hybrid engine for private code reviews: per-change static-analysis engine selection, normalized findings, graded filtering, over MCP.",
   "type": "module",
   "bin": {
-    "warren": "dist/server.js"
+    "opencr": "dist/server.js"
   },
   "scripts": {
     "build": "tsc",
