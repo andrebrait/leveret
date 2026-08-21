@@ -174,3 +174,40 @@ describe("acknowledgement messages", () => {
     expect(msg).toMatch(/🐇/);
   });
 });
+
+describe("skip configuration and notice", () => {
+  it("routeEvent carries action and title so skips can be judged and de-duplicated", () => {
+    const job = routeEvent("pull_request", {
+      action: "opened",
+      pull_request: {
+        number: 9,
+        title: "feat: thing [skip leveret]",
+        head: { sha: "abc" },
+        base: { ref: "main", repo: { full_name: "o/r", clone_url: "u" } },
+      },
+    });
+    expect(job).toMatchObject({ kind: "review", action: "opened", title: "feat: thing [skip leveret]" });
+  });
+
+  it("the skip notice names the config that ruled, in Leveret's voice", async () => {
+    const { skipMessage } = await import("../src/app/render.js");
+    const msg = skipMessage("review.enabled is false in .leveret.yml");
+    expect(msg).toMatch(/🐇/);
+    expect(msg).toContain("review.enabled is false in .leveret.yml");
+    expect(msg).toMatch(/noticed/i);
+  });
+
+  it("profile parses the review block; enabled defaults to true", async () => {
+    const { loadProfile } = await import("../src/profile.js");
+    const { mkdtempSync, writeFileSync } = await import("node:fs");
+    const { tmpdir } = await import("node:os");
+    const { join } = await import("node:path");
+    const d = mkdtempSync(join(tmpdir(), "lev-skipcfg-"));
+    writeFileSync(join(d, "p.yml"), "review:\n  enabled: false\n  skipTitle: '\\[hold\\]'\n");
+    const p = await loadProfile(join(d, "p.yml"));
+    expect(p.review.enabled).toBe(false);
+    expect(p.review.skipTitle).toBe("\\[hold\\]");
+    const empty = await loadProfile(join(d, "missing.yml"));
+    expect(empty.review.enabled).toBe(true);
+  });
+});

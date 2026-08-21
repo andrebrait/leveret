@@ -182,3 +182,11 @@ export function failMessage(err: unknown): string {
     `The server logs have the full story; push a new commit or re-open to retry.`,
   ].join("\n");
 }
+
+export function skipMessage(reason: string): string {
+  return [
+    `🐇 Noticed this pull request — but the repository's configuration asked me to`,
+    `sit this one out (${reason}). Not reviewing; ping me by changing the config if`,
+    `that's not what you wanted.`,
+  ].join("\n");
+}

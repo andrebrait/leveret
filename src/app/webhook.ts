@@ -23,6 +23,8 @@ export type Job =
       headSha: string;
       baseRef: string;
       cloneUrl: string;
+      action: string;
+      title: string;
       installationId?: number;
     }
   | {
@@ -41,6 +43,7 @@ interface PullPayload {
   action?: string;
   pull_request?: {
     number: number;
+    title?: string;
     head: { sha: string };
     base: { ref: string; repo: { full_name: string; clone_url: string } };
   };
@@ -64,6 +67,8 @@ export function routeEvent(event: string, payload: PullPayload): Job | null {
       headSha: pr.head.sha,
       baseRef: pr.base.ref,
       cloneUrl: pr.base.repo.clone_url,
+      action: payload.action,
+      title: pr.title ?? "",
       ...(payload.installation ? { installationId: payload.installation.id } : {}),
     };
   }

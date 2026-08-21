@@ -29,6 +29,13 @@ export interface CustomEngineDef {
   files: string[];
 }
 
+export interface ReviewConfig {
+  /** false = Leveret stays out of this repository's PRs (a notice is posted once) */
+  enabled: boolean;
+  /** regex; a matching PR title opts that PR out */
+  skipTitle?: string;
+}
+
 export interface Profile {
   engines: Record<string, EngineProfile>;
   suppress: SuppressEntry[];
@@ -36,6 +43,7 @@ export interface Profile {
   /** surface pre-existing findings adjacent to changed lines (default true);
    * false is the explicit "don't remind me" instruction */
   reminders: boolean;
+  review: ReviewConfig;
 }
 
 export interface Suppression {
@@ -44,7 +52,7 @@ export interface Suppression {
   reason: string;
 }
 
-const EMPTY: Profile = { engines: {}, suppress: [], custom: [], reminders: true };
+const EMPTY: Profile = { engines: {}, suppress: [], custom: [], reminders: true, review: { enabled: true } };
 const SEV_ORDER: Record<Severity, number> = { info: 0, warning: 1, error: 2 };
 
 export async function loadProfile(path: string): Promise<Profile> {
@@ -59,6 +67,7 @@ export async function loadProfile(path: string): Promise<Profile> {
     suppress?: Partial<SuppressEntry>[];
     custom?: Partial<CustomEngineDef>[];
     reminders?: boolean;
+    review?: { enabled?: boolean; skipTitle?: string };
   };
   const suppress = (doc.suppress ?? []).map((s) => {
     if (!s.rule) throw new Error(`profile ${path}: suppress entry missing rule`);
@@ -72,7 +81,13 @@ export async function loadProfile(path: string): Promise<Profile> {
     }
     return { id: c.id, command: c.command, files: c.files };
   });
-  return { engines: doc.engines ?? {}, suppress, custom, reminders: doc.reminders !== false };
+  return {
+    engines: doc.engines ?? {},
+    suppress,
+    custom,
+    reminders: doc.reminders !== false,
+    review: { enabled: doc.review?.enabled !== false, skipTitle: doc.review?.skipTitle },
+  };
 }
 
 /** Pre-run scope filter: files an engine may see under this profile. */

@@ -12,9 +12,14 @@ export interface ExecResult {
 }
 
 // No shell: file names from a diff must never hit string interpolation.
-export function run(cmd: string, args: string[], cwd: string): Promise<ExecResult> {
+export interface RunOpts {
+  /** hard cap: the child is SIGTERM'd at the deadline (no orphaned waits) */
+  timeoutMs?: number;
+}
+
+export function run(cmd: string, args: string[], cwd: string, opts?: RunOpts): Promise<ExecResult> {
   return new Promise((resolve) => {
-    execFile(cmd, args, { cwd, maxBuffer: 64 * 1024 * 1024 }, (err, stdout, stderr) => {
+    execFile(cmd, args, { cwd, maxBuffer: 64 * 1024 * 1024, timeout: opts?.timeoutMs ?? 0 }, (err, stdout, stderr) => {
       let code = 0;
       let signal: string | undefined;
       if (err) {
