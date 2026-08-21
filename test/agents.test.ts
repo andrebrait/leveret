@@ -63,6 +63,19 @@ describe("agent contracts", () => {
     expect(text).toMatch(/considered-fine|not-examined/);
   });
 
+  it("out-of-diff findings are a first-class category carrying their correlation", () => {
+    const review = loadContract("review", { repo: "r", base: "b" });
+    const verify = loadContract("verify", { repo: "r", base: "b" });
+    // review concerns and verified reports both mark scope...
+    expect(review).toContain('"scope"');
+    expect(verify).toContain('"scope"');
+    expect(verify).toContain('"out-of-diff"');
+    // ...and an out-of-diff item must SAY why it is connected to this change
+    expect(review).toContain('"correlation"');
+    expect(verify).toContain('"correlation"');
+    expect(verify).not.toMatch(/outside the diff[^.]*\bskip\b/i);
+  });
+
   it("the verify contract reports findings in importance tiers and carries coverage through", () => {
     const text = loadContract("verify", { repo: "r", base: "b" });
     for (const tier of ["critical", "major", "minor", "nit"]) {
