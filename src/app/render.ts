@@ -145,3 +145,40 @@ export function renderInline(v: VerifyOutput): InlineComment[] {
       ].join("\n"),
     }));
 }
+
+// ── Acknowledgement comment ─────────────────────────────────────────────────
+// Posted the moment a review job starts, then EDITED to the outcome — so the PR
+// never shows a silent bot or an eternal "working on it".
+
+export function ackMessage(headSha: string, model: string): string {
+  return [
+    `🐇 **Leveret is on it.**`,
+    "",
+    `Checking out \`${headSha.slice(0, 7)}\`, running the engines, then handing the`,
+    `leads to the reviewing agent (${model}). Findings arrive as inline comments`,
+    `plus a walkthrough — give it a few minutes.`,
+  ].join("\n");
+}
+
+export function doneMessage(v: VerifyOutput): string {
+  const counts = new Map<Tier, number>();
+  for (const r of v.report) counts.set(r.tier, (counts.get(r.tier) ?? 0) + 1);
+  const tiers = (["critical", "major", "minor", "nit"] as Tier[])
+    .filter((t) => counts.has(t))
+    .map((t) => `${counts.get(t)} ${t}`)
+    .join(", ");
+  const summary = v.report.length === 0 ? "no findings to report" : tiers;
+  return [
+    `🐇 **Review posted** — ${summary}; ${v.verdicts.length} items examined in total`,
+    `(everything judged is accounted for in the walkthrough, including what was`,
+    `dropped and why).`,
+  ].join("\n");
+}
+
+export function failMessage(err: unknown): string {
+  return [
+    `🐇 **Review failed** before it could post: \`${String(err).slice(0, 300)}\``,
+    "",
+    `The server logs have the full story; push a new commit or re-open to retry.`,
+  ].join("\n");
+}

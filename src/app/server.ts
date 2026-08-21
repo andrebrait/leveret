@@ -9,7 +9,7 @@ import { promisify } from "node:util";
 import { scan } from "../scan.js";
 import type { Finding, ScanResult } from "../findings.js";
 import { ensureGraph } from "./graph.js";
-import { makeApp, postReview } from "./github.js";
+import { makeApp, postComment, postReview, updateComment } from "./github.js";
 import {
   convertManifestCode,
   loadCredentials,
@@ -17,7 +17,7 @@ import {
   saveCredentials,
   type AppCredentials,
 } from "./manifest.js";
-import { renderInline, renderWalkthrough, type Tier, type VerifyOutput } from "./render.js";
+import { ackMessage, doneMessage, failMessage, renderInline, renderWalkthrough, type Tier, type VerifyOutput } from "./render.js";
 import { routeEvent, verifySignature, type Job } from "./webhook.js";
 
 // The App layer: GitHub plumbing only. It holds the App key and webhook secret —
@@ -62,6 +62,16 @@ function reportFromScan(result: ScanResult): VerifyOutput {
 }
 
 async function reviewJob(job: Extract<Job, { kind: "review" }>, creds: AppCredentials): Promise<void> {
+  const app = job.installationId ? makeApp({ appId: creds.appId, privateKey: creds.privateKey }) : null;
+  // the friendly heads-up, EDITED to the outcome when the job ends — a PR should
+  // never show a silent bot or an eternal "working on it"
+  let ackId: number | undefined;
+  if (app && job.installationId) {
+    const model = process.env.LEVERET_RUNNER_MODEL ?? "gpt-5.6-sol";
+    ackId = await postComment(app, job.installationId, job.repo, job.pr, ackMessage(job.headSha, model)).catch(
+      () => undefined,
+    );
+  }
   const work = await mkdtemp(join(tmpdir(), "leveret-app-"));
   try {
     await exec("git", ["clone", "--quiet", job.cloneUrl, work]);
@@ -95,8 +105,7 @@ async function reviewJob(job: Extract<Job, { kind: "review" }>, creds: AppCreden
       verify = reportFromScan(result);
     }
 
-    if (job.installationId) {
-      const app = makeApp({ appId: creds.appId, privateKey: creds.privateKey });
+    if (app && job.installationId) {
       await postReview(
         app,
         job.installationId,
@@ -106,9 +115,17 @@ async function reviewJob(job: Extract<Job, { kind: "review" }>, creds: AppCreden
         renderWalkthrough(verify, result, graph),
         renderInline(verify),
       );
+      if (ackId) {
+        await updateComment(app, job.installationId, job.repo, ackId, doneMessage(verify)).catch(() => {});
+      }
     } else {
       console.log(renderWalkthrough(verify, result, graph));
     }
+  } catch (err) {
+    if (app && job.installationId && ackId) {
+      await updateComment(app, job.installationId, job.repo, ackId, failMessage(err)).catch(() => {});
+    }
+    throw err;
   } finally {
     await rm(work, { recursive: true, force: true }).catch(() => {});
   }

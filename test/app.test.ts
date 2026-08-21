@@ -145,3 +145,32 @@ describe("rendering", () => {
     expect(inline.some((c) => c.path === "c.ts")).toBe(false);
   });
 });
+
+describe("acknowledgement messages", () => {
+  it("the ack names the commit and sets expectations, in Leveret's own voice", async () => {
+    const { ackMessage } = await import("../src/app/render.js");
+    const msg = ackMessage("abc123def456", "gpt-5.6-sol");
+    expect(msg).toContain("abc123d"); // short sha
+    expect(msg).toContain("gpt-5.6-sol");
+    expect(msg).toMatch(/🐇/);
+    // not CodeRabbit's furniture ("walkthrough" is Leveret's own established term)
+    expect(msg).not.toMatch(/Tip:|<details>|Review Stack|chill/i);
+  });
+
+  it("the done edit reports tier counts and examined totals", async () => {
+    const { doneMessage } = await import("../src/app/render.js");
+    const msg = doneMessage(verifyOutput);
+    expect(msg).toMatch(/1 critical/);
+    expect(msg).toMatch(/1 major/);
+    expect(msg).toMatch(/1 minor/);
+    expect(msg).toMatch(/5 .*(examined|judged)/);
+    expect(msg).toMatch(/🐇/);
+  });
+
+  it("the failure edit says what broke instead of vanishing", async () => {
+    const { failMessage } = await import("../src/app/render.js");
+    const msg = failMessage(new Error("omp exploded"));
+    expect(msg).toContain("omp exploded");
+    expect(msg).toMatch(/🐇/);
+  });
+});
