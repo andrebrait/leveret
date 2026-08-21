@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { randomBytes } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 import { execFile } from "node:child_process";
 import { appendFile, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
@@ -19,6 +19,7 @@ import {
   type AppCredentials,
 } from "./manifest.js";
 import { ackMessage, doneMessage, failMessage, renderInline, renderWalkthrough, skipMessage, type Tier, type VerifyOutput } from "./render.js";
+import { makeLogger } from "./log.js";
 import { routeEvent, verifySignature, type Job } from "./webhook.js";
 
 // The App layer: GitHub plumbing only. It holds the App key and webhook secret —
@@ -63,6 +64,9 @@ function reportFromScan(result: ScanResult): VerifyOutput {
 }
 
 async function reviewJob(job: Extract<Job, { kind: "review" }>, creds: AppCredentials): Promise<void> {
+  const runId = randomUUID();
+  const log = makeLogger({ runId, prUrl: `https://github.com/${job.repo}/pull/${job.pr}` });
+  log.info("review job started", { headSha: job.headSha, action: job.action });
   const app = job.installationId ? makeApp({ appId: creds.appId, privateKey: creds.privateKey }) : null;
   let ackId: number | undefined;
   const work = await mkdtemp(join(tmpdir(), "leveret-app-"));
@@ -97,7 +101,7 @@ async function reviewJob(job: Extract<Job, { kind: "review" }>, creds: AppCreden
     // the checkout gets its code graph before any agent looks at it (owner ruling:
     // the graph is derived and always buildable — structure is queried, not grepped)
     const graph = await ensureGraph(work);
-    if (!graph.ok) console.warn(`codegraph unavailable for ${job.repo}#${job.pr}: ${graph.detail}`);
+    if (!graph.ok) log.warn("codegraph unavailable", { detail: graph.detail });
     const result = await scan({ repo: work, base });
 
     let verify: VerifyOutput;
@@ -134,12 +138,17 @@ async function reviewJob(job: Extract<Job, { kind: "review" }>, creds: AppCreden
       if (ackId) {
         await updateComment(app, job.installationId, job.repo, ackId, doneMessage(verify)).catch(() => {});
       }
+      log.info("review posted", { findings: verify.report.length });
     } else {
       console.log(renderWalkthrough(verify, result, graph));
     }
   } catch (err) {
-    if (app && job.installationId && ackId) {
-      await updateComment(app, job.installationId, job.repo, ackId, failMessage(err)).catch(() => {});
+    log.error("review job failed", { err });
+    // the crash report reaches the PR with the run id even when the ack never posted
+    if (app && job.installationId) {
+      const body = failMessage(err, runId);
+      if (ackId) await updateComment(app, job.installationId, job.repo, ackId, body).catch(() => {});
+      else await postComment(app, job.installationId, job.repo, job.pr, body).catch(() => {});
     }
     throw err;
   } finally {
@@ -243,7 +252,7 @@ export async function main(): Promise<void> {
       if (!job) return;
       const activeCreds = creds;
       const run = job.kind === "review" ? reviewJob(job, activeCreds) : learnFeedJob(job);
-      run.catch((err) => console.error(`${job!.kind} job failed:`, err));
+      run.catch(() => {}); // job-level loggers already reported with the run id
     });
   });
   server.listen(port, () =>
