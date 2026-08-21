@@ -17,11 +17,18 @@ nothing leaves your infrastructure.
 ## How a review works
 
 ```mermaid
-flowchart LR
-    D[PR diff] --> S[scan<br>engines + delta vs base<br>+ profile + memory]
-    S -- leads --> R[review agent<br>five lenses,<br>cross-file blast radius]
-    R -- concerns --> V[verification agent<br>refute or evidence,<br>three grades]
-    V -- survivors only --> T[tiered findings<br>+ walkthrough report]
+flowchart TD
+    D[/"📄 PR diff"/]:::gh
+    S["🔍 scan<br>engines + delta vs base<br>+ profile + memory"]:::core
+    R["🐇 review agent<br>five lenses,<br>cross-file blast radius"]:::agent
+    V["⚖️ verification agent<br>refute or evidence,<br>three grades"]:::agent
+    T[/"📋 tiered findings<br>+ walkthrough report"/]:::gh
+    D --> S -- leads --> R -- concerns --> V -- survivors only --> T
+    classDef gh fill:#6ea8fe,stroke:#3d6fd9,color:#111
+    classDef tun fill:#ffc86b,stroke:#cc8f22,color:#111
+    classDef core fill:#7ed6a2,stroke:#3d9e6a,color:#111
+    classDef agent fill:#c9a0f5,stroke:#9059d1,color:#111
+    classDef store fill:#9fd8e3,stroke:#4d9aab,color:#111
 ```
 
 1. **Deterministic first pass.** Engines run only against what the change touches:

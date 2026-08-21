@@ -60,32 +60,37 @@ LEVERET_RUNNER="leveret-runner-omp --model gpt-5.6-sol --effort high"
 ## How it works
 
 ```mermaid
-flowchart LR
-    subgraph GitHub
-        PR[Pull request<br>opened / pushed]
-        REV[Posted review:<br>tiered inline comments<br>+ walkthrough]
-        REPLY[Human reply<br>on a finding]
+flowchart TD
+    subgraph GitHub["☁️ GitHub"]
+        PR["📄 Pull request<br>opened / pushed"]:::gh
+        REV["📋 Posted review:<br>tiered inline comments<br>+ walkthrough"]:::gh
+        REPLY["💬 Human reply<br>on a finding"]:::gh
     end
 
-    subgraph tunnel [Tunnel — funnel / smee / cloudflared]
-        T[public URL]
-    end
+    T["🚇 Tunnel<br>funnel / smee / cloudflared"]:::tun
 
-    subgraph your [Your machine — leveret-app server]
-        WH[Webhook receiver<br>signature check]
-        CO[Throwaway checkout<br>of the PR head]
-        CG[Code graph<br>built at that commit]
-        SCAN[scan: engines + delta<br>+ profile + memory]
-        RUN[leveret-runner-omp<br>your model & credentials]
-        RA[Review agent<br>five lenses]
-        VA[Verification agent<br>refute or evidence]
-        FEED[learn-feed.jsonl]
+    subgraph your["🏠 Your machine — leveret-app server"]
+        direction TB
+        WH["📥 Webhook receiver<br>signature check"]:::core
+        CO["📦 Throwaway checkout<br>of the PR head"]:::core
+        CG["🕸️ Code graph<br>built at that commit"]:::core
+        SCAN["🔍 scan: engines + delta<br>+ profile + memory"]:::core
+        RUN["🤖 leveret-runner-omp<br>your model & credentials"]:::agent
+        RA["🐇 Review agent<br>five lenses"]:::agent
+        VA["⚖️ Verification agent<br>refute or evidence"]:::agent
+        FEED[("🧠 learn-feed.jsonl")]:::store
     end
 
     PR --> T --> WH --> CO --> CG --> SCAN --> RUN
     RUN --> RA --> VA
     VA --> REV
-    REPLY --> T --> WH --> FEED
+    REPLY --> T
+    WH --> FEED
+    classDef gh fill:#6ea8fe,stroke:#3d6fd9,color:#111
+    classDef tun fill:#ffc86b,stroke:#cc8f22,color:#111
+    classDef core fill:#7ed6a2,stroke:#3d9e6a,color:#111
+    classDef agent fill:#c9a0f5,stroke:#9059d1,color:#111
+    classDef store fill:#9fd8e3,stroke:#4d9aab,color:#111
 ```
 
 The pieces, left to right:
