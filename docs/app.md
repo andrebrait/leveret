@@ -62,27 +62,36 @@ LEVERET_RUNNER="leveret-runner-omp --model gpt-5.6-sol --effort high"
 ```mermaid
 flowchart TD
     subgraph GitHub["☁️ GitHub"]
+        direction LR
         PR["📄 Pull request<br>opened / pushed"]:::gh
-        REV["📋 Posted review:<br>tiered inline comments<br>+ walkthrough"]:::gh
+        REV["📋 Posted review:<br>tiered comments<br>+ walkthrough"]:::gh
         REPLY["💬 Human reply<br>on a finding"]:::gh
     end
 
-    T["🚇 Tunnel<br>funnel / smee / cloudflared"]:::tun
+    T["🚇 Tunnel — funnel / smee / cloudflared"]:::tun
 
     subgraph your["🏠 Your machine — leveret-app server"]
-        direction TB
-        WH["📥 Webhook receiver<br>signature check"]:::core
-        CO["📦 Throwaway checkout<br>of the PR head"]:::core
-        CG["🕸️ Code graph<br>built at that commit"]:::core
-        SCAN["🔍 scan: engines + delta<br>+ profile + memory"]:::core
-        RUN["🤖 leveret-runner-omp<br>your model & credentials"]:::agent
-        RA["🐇 Review agent<br>five lenses"]:::agent
-        VA["⚖️ Verification agent<br>refute or evidence"]:::agent
+        direction LR
+        subgraph det["deterministic"]
+            direction TB
+            WH["📥 Webhook receiver<br>signature check"]:::core
+            CO["📦 Throwaway checkout<br>of the PR head"]:::core
+            CG["🕸️ Code graph<br>at that commit"]:::core
+            SCAN["🔍 scan: engines + delta<br>+ profile + memory"]:::core
+            WH --> CO --> CG --> SCAN
+        end
+        subgraph ag["agents — your model & credentials"]
+            direction TB
+            RUN["🤖 leveret-runner-omp"]:::agent
+            RA["🐇 Review agent<br>five lenses"]:::agent
+            VA["⚖️ Verification agent<br>refute or evidence"]:::agent
+            RUN --> RA --> VA
+        end
         FEED[("🧠 learn-feed.jsonl")]:::store
     end
 
-    PR --> T --> WH --> CO --> CG --> SCAN --> RUN
-    RUN --> RA --> VA
+    PR --> T --> WH
+    SCAN --> RUN
     VA --> REV
     REPLY --> T
     WH --> FEED
