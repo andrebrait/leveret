@@ -1,12 +1,12 @@
 <p align="center">
-  <img src="assets/logo.svg" width="200" alt="Leveret logo">
+  <img src="assets/logo.svg" width="360" alt="Leveret logo">
 </p>
 
-# leveret
+# Leveret
 
 A leveret is a young hare — small, fast, and born with its eyes open.
 
-leveret is a self-hosted, hybrid engine for private code reviews: the successor to
+Leveret is a self-hosted, hybrid engine for private code reviews: the successor to
 hosted AI review bots for teams whose code stays home. Deterministic static analysis,
 AST-level search, and a graded filtering pipeline exposed over MCP, driven by whatever
 reviewing agent you bring (BYOM — Claude Code, a local model via any MCP-capable
@@ -37,6 +37,9 @@ Pipeline the project targets:
   gets wrong.
 - **context** `{repo, files}` — prioritization signal, not findings: per-function
   cyclomatic complexity (lizard), 12-month churn, last-touched date.
+- **remember / memory / learn** — the review memory: fingerprint verdicts with
+  anchors, hygiene listing, and human-taught conventions that are injected into the
+  served `review`/`verify` prompt contracts as repo rulings.
 
 ## Run
 
