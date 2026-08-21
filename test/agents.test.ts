@@ -53,4 +53,24 @@ describe("agent contracts", () => {
   it("CONTRACTS enumerates exactly the shipped contracts", () => {
     expect(Object.keys(CONTRACTS).sort()).toEqual(["review", "verify"]);
   });
+
+  it("the review contract mandates a coverage report beside the concerns", () => {
+    const text = loadContract("review", { repo: "r", base: "b" });
+    expect(text).toContain('"coverage"');
+    expect(text).toContain('"concerns"');
+    // per-file verdict for EVERY changed file — coverage without per-file honesty is theater
+    expect(text).toMatch(/every changed file/i);
+    expect(text).toMatch(/considered-fine|not-examined/);
+  });
+
+  it("the verify contract reports findings in importance tiers and carries coverage through", () => {
+    const text = loadContract("verify", { repo: "r", base: "b" });
+    for (const tier of ["critical", "major", "minor", "nit"]) {
+      expect(text).toContain(`"${tier}"`);
+    }
+    expect(text).toContain('"tier"');
+    expect(text).toContain('"coverage"');
+    // tier is review judgment, not engine severity — both must exist distinctly
+    expect(text).toContain('"severity"');
+  });
 });
