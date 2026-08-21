@@ -43,6 +43,7 @@ Return only JSON; no prose around it:
       "file": "src/foo.php",
       "line": 42,
       "title": "fail-open when the manifest entry is missing",
+      "tier": "major",
       "severity": "error",
       "evidence": "command + output, or cited current code",
       "suggested_fix": "optional, concrete"
@@ -51,9 +52,25 @@ Return only JSON; no prose around it:
   "verdicts": [
     { "id": "R1", "grade": "actionable" },
     { "id": "R2", "grade": "false-positive", "reason": "guarded two lines above" }
-  ]
+  ],
+  "coverage": { "lenses": [], "files": [] }
 }
 ```
 
-`report` holds only `actionable` items. `verdicts` holds every concern and lead you
-judged, so nothing is silently dropped — the counts must add up.
+Every `report` item carries a **tier** — your judgment of importance, distinct from
+the engine's mechanical `severity`:
+
+- `"critical"` — merging this breaks correctness, security, or data for real users;
+  must be fixed before merge.
+- `"major"` — a real defect with concrete impact; should be fixed in this PR.
+- `"minor"` — real but low-impact; fine to fix here or in a follow-up.
+- `"nit"` — polish; never blocks anything.
+
+Order `report` by tier, most severe first. `report` holds only `actionable` items.
+`verdicts` holds every concern and lead you judged, so nothing is silently dropped —
+the counts must add up. `coverage` is the review agent's coverage block, passed
+through with any corrections you found (a file the reviewer marked considered-fine
+where you confirmed a defect flips to findings). The final published summary is
+built from this object: tiers group the inline comments, coverage becomes the
+"what was checked" walkthrough, and the verdict/suppression counts show what was
+examined and dropped rather than only what survived.

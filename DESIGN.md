@@ -142,6 +142,27 @@ Deliberately not wrapped: code-graph queries (CodeGraph MCP exists), LSP diagnos
 (client surface), shell probes (the driving agent already executes commands — leveret
 never needs its own sandbox because the agent *is* the sandbox).
 
+## Reporting (product decision, 2026-08-21)
+
+Findings publish in **importance tiers** — `critical / major / minor / nit` — a
+review judgment assigned by the verification agent, deliberately distinct from the
+engines' mechanical `severity`. Inline comments group by tier, most severe first.
+
+Beside the inline findings, every review leaves a **walkthrough summary comment**
+(the CodeRabbit-style report of work done, not just defects found):
+
+- per-lens outcomes — every lens listed with its result, clean included;
+- per-file verdicts for every changed file: `findings / considered-fine /
+  not-examined (why)`;
+- the engine table (status, found/kept counts), suppression tallies with reasons,
+  `preExisting` count, base-pass errors, and the reminders section.
+
+The principle throughout: the report shows **what was checked**, not only what was
+found — a clean review must be distinguishable from a shallow one. The data for all
+of this already exists in the verify output object (`report` + `verdicts` +
+`coverage`) and `ScanResult`; the App layer renders it, the MCP/interactive path
+prints it.
+
 ## Distribution: GitHub App + BYOAI (product decision, 2026-08-21)
 
 leveret ships as a **GitHub App** — install on a repo, PRs get reviewed, findings

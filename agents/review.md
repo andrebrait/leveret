@@ -45,21 +45,41 @@ be verified and will be dropped.
 
 ## Output
 
-Return only a JSON array; no prose around it. One element per concern:
+Return only a JSON object; no prose around it:
 
 ```json
-[
-  {
-    "id": "R1",
-    "file": "src/foo.php",
-    "line": 42,
-    "title": "fail-open when the manifest entry is missing",
-    "claim": "what is wrong, stated falsifiably",
-    "impact": "what breaks, for whom, under what input",
-    "evidence_hint": "the command or code path the verifier should use to confirm"
+{
+  "concerns": [
+    {
+      "id": "R1",
+      "file": "src/foo.php",
+      "line": 42,
+      "title": "fail-open when the manifest entry is missing",
+      "claim": "what is wrong, stated falsifiably",
+      "impact": "what breaks, for whom, under what input",
+      "evidence_hint": "the command or code path the verifier should use to confirm"
+    }
+  ],
+  "coverage": {
+    "lenses": [
+      { "lens": "correctness-hostile-inputs", "outcome": "2 concerns" },
+      { "lens": "contract-conformance", "outcome": "clean" },
+      { "lens": "test-honesty", "outcome": "clean" },
+      { "lens": "blast-radius", "outcome": "traced parse_feed, PfbConfig::get to 7 external call sites; clean" },
+      { "lens": "leads-triage", "outcome": "24 leads: 2 adopted, 22 dismissed (class reasons in concerns)" }
+    ],
+    "files": [
+      { "file": "src/foo.php", "verdict": "findings" },
+      { "file": "src/bar.php", "verdict": "considered-fine", "note": "config plumbing only" },
+      { "file": "docs/x.md", "verdict": "not-examined", "note": "prose-only change" }
+    ]
   }
-]
+}
 ```
 
-Raise concerns in files outside the diff with the same shape. An empty array is a
-valid result; do not invent concerns to look useful.
+The coverage block is mandatory and covers **every changed file** with a verdict —
+`findings`, `considered-fine`, or `not-examined` (with why). Every lens appears with
+its outcome even when clean: the report must show what was checked, not only what
+was found. Raise concerns in files outside the diff with the same shape (list such
+files in `files` too). An empty concerns array is a valid result; do not invent
+concerns to look useful.
