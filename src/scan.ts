@@ -39,6 +39,45 @@ export async function renamedFiles(repo: string, base: string): Promise<Map<stri
   return map;
 }
 
+/** head-side changed line ranges per file, from `git diff -U0` hunk headers */
+export async function changedHunks(
+  repo: string,
+  base: string,
+): Promise<Map<string, [number, number][]>> {
+  const r = await run("git", ["diff", "-U0", "-M", `${base}...HEAD`], repo);
+  if (r.code !== 0) throw new Error(`git diff failed: ${r.stderr.slice(0, 500)}`);
+  const hunks = new Map<string, [number, number][]>();
+  let file = "";
+  for (const line of r.stdout.split("\n")) {
+    const f = line.match(/^\+\+\+ b\/(.*)$/);
+    if (f) {
+      file = f[1]!;
+      continue;
+    }
+    const h = line.match(/^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@/);
+    if (h && file) {
+      const start = Number(h[1]);
+      const count = h[2] === undefined ? 1 : Number(h[2]);
+      const list = hunks.get(file) ?? [];
+      list.push([start, start + Math.max(count, 1) - 1]);
+      hunks.set(file, list);
+    }
+  }
+  return hunks;
+}
+
+/** how close (in lines) a pre-existing finding must sit to a changed hunk to
+ * count as "the change touches that part" and earn a reminder */
+const REMINDER_RADIUS = 10;
+
+function nearChange(hunks: Map<string, [number, number][]>, f: Finding): boolean {
+  const ranges = hunks.get(f.file);
+  if (!ranges) return false;
+  const lo = f.line;
+  const hi = f.endLine ?? f.line;
+  return ranges.some(([s, e]) => hi >= s - REMINDER_RADIUS && lo <= e + REMINDER_RADIUS);
+}
+
 /** Run every applicable engine over one tree. The single engine-execution path —
  * the head scan and the delta base scan both go through here. */
 async function runEngines(
@@ -137,6 +176,7 @@ export async function scan(opts: {
   // (gitleaks) are inherently delta and deselect themselves without a base.
   let preExisting = 0;
   let baseErrors: EngineReport[] = [];
+  let reminderCandidates: Finding[] = [];
   if (opts.base) {
     const renames = await renamedFiles(opts.repo, opts.base);
     const baseScan = await baseFindingKeys(opts.repo, opts.base, renames, (baseRepo, baseReports) =>
@@ -161,8 +201,17 @@ export async function scan(opts: {
         : "introduced";
     }
     if (opts.delta !== false) {
-      preExisting = findings.filter((f) => f.provenance === "pre-existing").length;
+      const dropped = findings.filter((f) => f.provenance === "pre-existing");
+      preExisting = dropped.length;
       findings.splice(0, findings.length, ...findings.filter((f) => f.provenance === "introduced"));
+      // Pre-existing is dropped, never forgotten: a defect sitting next to the
+      // changed lines gets re-surfaced as a reminder while someone is in there —
+      // unless the profile explicitly says reminders: false, or a suppression
+      // prices the class. (Owner ruling, 2026-08-21.)
+      if (profile.reminders) {
+        const hunks = await changedHunks(opts.repo, opts.base);
+        reminderCandidates = dropped.filter((f) => nearChange(hunks, f));
+      }
     }
   } else {
     for (const f of findings) f.provenance = "introduced";
@@ -170,6 +219,10 @@ export async function scan(opts: {
 
   const { kept: afterProfile, suppressed: byProfile } = filterFindings(profile, findings);
   const { kept, suppressed: byMemory } = await applyMemory(opts.repo, afterProfile);
+  // reminders pass the same profile + memory suppression layers as findings
+  const { kept: remindersAfterProfile } = filterFindings(profile, reminderCandidates);
+  const { kept: reminders } = await applyMemory(opts.repo, remindersAfterProfile);
+  reminders.sort((a, b) => a.file.localeCompare(b.file) || a.line - b.line);
   const suppressed = [...byProfile, ...byMemory].sort((a, b) => a.rule.localeCompare(b.rule));
   kept.sort((a, b) => a.file.localeCompare(b.file) || a.line - b.line);
   for (const r of reports) {
@@ -178,5 +231,5 @@ export async function scan(opts: {
     r.status = r.kept > 0 ? "findings" : r.found > 0 ? "filtered" : "clean";
   }
   reports.sort((a, b) => a.engine.localeCompare(b.engine));
-  return { findings: kept, engines: reports, suppressed, preExisting, baseErrors };
+  return { findings: kept, engines: reports, suppressed, preExisting, baseErrors, reminders };
 }

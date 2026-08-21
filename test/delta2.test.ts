@@ -129,6 +129,41 @@ describe("surfaced base-pass failures (R2)", () => {
   });
 });
 
+describe("pre-existing reminders", () => {
+  async function remindRepo() {
+    const { repo, git } = mkrepo("lev-rem-");
+    // base: two defects — one near the future change, one far from it
+    const filler = Array.from({ length: 40 }, (_, i) => `ok_${i} = ${i}`).join("\n");
+    writeFileSync(join(repo, "app.py"), `print(near_defect)\n${filler}\nprint(far_defect)\n`);
+    commit(git, "base");
+    git(["branch", "base"]);
+    // head: change line 2 only — adjacent to the near defect, ~40 lines from the far one
+    writeFileSync(
+      join(repo, "app.py"),
+      `print(near_defect)\nok_0 = 100\n${filler.split("\n").slice(1).join("\n")}\nprint(far_defect)\n`,
+    );
+    commit(git, "touch the line next to the first defect");
+    return repo;
+  }
+
+  it("a pre-existing defect adjacent to the change comes back as a reminder; a distant one stays dropped", async () => {
+    const repo = await remindRepo();
+    const r = await scan({ repo, base: "base", engines: ["ruff"] });
+    expect(r.findings).toEqual([]); // nothing introduced
+    expect(r.preExisting).toBe(2); // both dropped from findings
+    expect(r.reminders).toHaveLength(1);
+    expect(r.reminders[0]).toMatchObject({ rule: "F821", line: 1, provenance: "pre-existing" });
+  });
+
+  it("reminders: false in the profile silences them (explicit user instruction)", async () => {
+    const repo = await remindRepo();
+    writeFileSync(join(repo, ".leveret.yml"), "reminders: false\n");
+    const r = await scan({ repo, base: "base", engines: ["ruff"] });
+    expect(r.reminders).toEqual([]);
+    expect(r.preExisting).toBe(2);
+  });
+});
+
 describe("SARIF URI decoding (R12)", () => {
   it("percent-encoded artifact URIs decode to real paths", () => {
     const doc = JSON.stringify({
