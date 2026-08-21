@@ -25,11 +25,18 @@ export function parseSarif(engine: string, raw: string): Finding[] {
   for (const run of doc.runs ?? []) {
     for (const r of run.results ?? []) {
       const loc = r.locations?.[0]?.physicalLocation;
+      const rawUri = (loc?.artifactLocation?.uri ?? "").replace(/^file:\/\//, "");
+      let file = rawUri;
+      try {
+        file = decodeURIComponent(rawUri); // spec-conformant producers percent-encode
+      } catch {
+        /* malformed escape: keep the raw string rather than dropping the finding */
+      }
       findings.push({
         engine,
         rule: r.ruleId ?? engine,
         severity: LEVEL[r.level ?? ""] ?? "warning",
-        file: (loc?.artifactLocation?.uri ?? "").replace(/^file:\/\//, ""),
+        file,
         line: loc?.region?.startLine ?? 1,
         endLine: loc?.region?.endLine,
         message: r.message?.text ?? r.ruleId ?? engine,

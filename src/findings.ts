@@ -38,4 +38,7 @@ export interface ScanResult {
   suppressed: { rule: string; count: number; reason: string }[];
   /** findings already present at the base tree, dropped by the delta scan */
   preExisting: number;
+  /** engines that failed or were missing during the delta BASE pass: their head
+   * findings keep provenance "introduced" but that classification is unverified */
+  baseErrors: EngineReport[];
 }
