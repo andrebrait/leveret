@@ -93,6 +93,14 @@ Repo-scope memory lives **in the reviewed repo**, versioned and reviewable —
   conventions across repos) is a later import layer, not MVP.
 - **Provenance**: entries record who graded (agent or human) and human confirmation
   when given ("won't fix" reply on a PR comment is a confirmation event).
+- **Human feedback is a memory *source*, not just a confirmation** (CodeRabbit
+  parity, 2026-08-21): CodeRabbit builds its learnings primarily by mining the
+  maintainer's replies to its own comments — corrections, "we do X here", scope
+  rulings — not only its own verdicts. leveret needs the same ingestion path: a
+  reply on a posted finding (or an explicit teach flow) becomes a memory entry with
+  the human as author, carrying more authority than an agent-graded one. Agent
+  verdicts decay and get GC'd; human-taught entries persist until a human retires
+  them.
 - **Promotion**: when instance entries for the same rule pile up under one subtree,
   the verifier proposes a profile entry or a glob memory — recurring pricing should
   become one line, not N.
