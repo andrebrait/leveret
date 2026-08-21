@@ -128,6 +128,14 @@ describe("rendering", () => {
     expect(md).toMatch(/dropped/i);
   });
 
+  it("the walkthrough states whether the graph surface was live — a reviewer capability, not a repo property", () => {
+    const withGraph = renderWalkthrough(verifyOutput, scanResult, { ok: true });
+    expect(withGraph).toMatch(/code graph.*live/i);
+    const without = renderWalkthrough(verifyOutput, scanResult, { ok: false, detail: "codegraph not on PATH" });
+    expect(without).toMatch(/code graph.*unavailable/i);
+    expect(without).toContain("codegraph not on PATH");
+  });
+
   it("inline comments cover only in-diff findings, tier-tagged", () => {
     const inline = renderInline(verifyOutput);
     expect(inline).toHaveLength(2);

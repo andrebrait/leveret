@@ -23,7 +23,7 @@ leveret replicates each pillar with local, inspectable pieces:
 | Pillar | leveret component |
 | --- | --- |
 | Deterministic first pass | engine registry behind the `scan` MCP tool |
-| Code graph | CodeGraph MCP (already indexed per worktree) — composed by the agent, not wrapped |
+| Code graph | leveret's OWN capability: `ensureGraph()` builds the index into every checkout at the exact reviewed commit; agents query it via the codegraph MCP. The reviewed repo shipping or lacking an index is irrelevant. |
 | AST grounding | `ast_search` (ast-grep) + custom rule packs; LSP diagnostics via the client's LSP surface (e.g. Serena) |
 | Verification filter | three-layer filter pipeline (below) ending in a verification agent |
 | Memory | in-repo, versioned finding-verdict store + `remember` tool |
