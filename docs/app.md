@@ -61,6 +61,15 @@ or API key, a Codex/ChatGPT-backed client, or a local model behind an
 OpenAI-compatible endpoint. The App process never sees the provider credential —
 the runner command carries its own environment.
 
+The shipped default is `leveret-runner-omp` (set `LEVERET_RUNNER=leveret-runner-omp`):
+omp.sh headless with the purity flags fixed (no skills/extensions/rules/session/LSP,
+compaction off — the standardization) and the caller's choices flowing through CLI
+args or env (CLI wins): `--model`/`LEVERET_RUNNER_MODEL` (default gpt-5.6-sol),
+`--effort`/`LEVERET_RUNNER_EFFORT` (default high), `--provider`, `--max-time`, and
+`--omp-arg`/`LEVERET_RUNNER_OMP_ARGS` for provider-shaped passthrough (profile,
+api-key). The effective harness + model + thinking land in the walkthrough's
+run-configuration line. omp's subscription support carries the BYOAI matrix.
+
 Without `LEVERET_RUNNER`, reviews are deterministic-only: engine findings post
 directly, and the walkthrough states plainly that the agent lenses did not run.
 

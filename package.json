@@ -5,7 +5,8 @@
   "type": "module",
   "bin": {
     "leveret": "dist/server.js",
-    "leveret-app": "dist/app/server.js"
+    "leveret-app": "dist/app/server.js",
+    "leveret-runner-omp": "dist/runner/omp.js"
   },
   "scripts": {
     "build": "tsc",
