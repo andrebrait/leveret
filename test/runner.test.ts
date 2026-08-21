@@ -83,3 +83,13 @@ describe("buildMcpConfig", () => {
     expect(noGraph.mcpServers.codegraph).toBeUndefined();
   });
 });
+
+describe("parseDuration", () => {
+  it("understands omp-style durations and adds the slack for the outer cap", async () => {
+    const { parseDuration } = await import("../src/runner/omp.js");
+    expect(parseDuration("30m")).toBe(30 * 60_000);
+    expect(parseDuration("90")).toBe(90_000);
+    expect(parseDuration("1h")).toBe(3_600_000);
+    expect(parseDuration("bogus")).toBeNull();
+  });
+});

@@ -108,6 +108,14 @@ export function parseOmpEvents(stream: string): OmpRunResult {
   return { json, toolCalls, mcpCalls };
 }
 
+/** omp-style duration to ms: "30m", "1h", bare seconds. null = unparseable. */
+export function parseDuration(v: string): number | null {
+  const m = v.match(/^(\d+)([smh]?)$/);
+  if (!m) return null;
+  const n = Number(m[1]);
+  return m[2] === "h" ? n * 3_600_000 : m[2] === "m" ? n * 60_000 : n * 1000;
+}
+
 export interface McpConfig {
   mcpServers: Record<string, { command: string; args: string[] }>;
 }
@@ -142,9 +150,26 @@ async function phase(
 ): Promise<OmpRunResult> {
   const promptPath = join(repo, `.leveret-prompt-${Math.random().toString(36).slice(2, 8)}.md`);
   await writeFile(promptPath, prompt);
-  const r = await exec("omp", [...args, `--config=${overlayPath}`, `@${promptPath}`], {
-    cwd: repo,
-    maxBuffer: 256 * 1024 * 1024,
+  // Outer deadline, belt over omp's own --max-time suspenders: a wedged omp has
+  // been observed sailing past its internal timer (31m against a 30m cap), so the
+  // runner enforces max-time + 5 minutes itself and the review fails LOUDLY
+  // (crash comment + runId) instead of hanging forever.
+  const maxTime = args.find((a) => a.startsWith("--max-time="))?.slice("--max-time=".length) ?? "30m";
+  const deadlineMs = (parseDuration(maxTime) ?? 1_800_000) + 300_000;
+  const r = await new Promise<{ stdout: string; code: number | null; signal: string | null }>((resolve, reject) => {
+    execFile(
+      "omp",
+      [...args, `--config=${overlayPath}`, `@${promptPath}`],
+      { cwd: repo, maxBuffer: 256 * 1024 * 1024, timeout: deadlineMs },
+      (err, stdout) => {
+        const e = err as (NodeJS.ErrnoException & { signal?: string; killed?: boolean }) | null;
+        if (e?.killed || (e && typeof e.signal === "string" && e.signal)) {
+          reject(new Error(`omp exceeded the phase deadline (${maxTime} + 5m slack) and was killed`));
+          return;
+        }
+        resolve({ stdout: stdout ?? "", code: e ? -1 : 0, signal: e?.signal ?? null });
+      },
+    );
   });
   return parseOmpEvents(r.stdout);
 }
