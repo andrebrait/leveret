@@ -4,7 +4,7 @@
 // caller's choice. Two phases: review contract -> concerns, verify contract ->
 // {report, verdicts, coverage}, printed on stdout for the App to render.
 
-import { execFile } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
@@ -108,6 +108,60 @@ export function parseOmpEvents(stream: string): OmpRunResult {
   return { json, toolCalls, mcpCalls };
 }
 
+export interface CaptureResult {
+  code: number;
+  stdout: string;
+  stderr: string;
+  timedOut: boolean;
+}
+
+/** The phase executor: stdin IGNORED (omp waits for stdin EOF in print mode and
+ * wedged two live reviews behind an execFile pipe), output captured, hard
+ * deadline enforced by SIGKILL. */
+export function spawnCapture(
+  cmd: string,
+  args: string[],
+  cwd: string,
+  deadlineMs: number,
+): Promise<CaptureResult> {
+  return new Promise((resolve) => {
+    const child = spawn(cmd, args, { cwd, stdio: ["ignore", "pipe", "pipe"] });
+    let stdout = "";
+    let stderr = "";
+    let timedOut = false;
+    child.stdout.on("data", (d: Buffer) => (stdout += d));
+    child.stderr.on("data", (d: Buffer) => (stderr += d));
+    const timer = setTimeout(() => {
+      timedOut = true;
+      child.kill("SIGKILL");
+    }, deadlineMs);
+    child.on("close", (code) => {
+      clearTimeout(timer);
+      resolve({ code: code ?? -1, stdout, stderr, timedOut });
+    });
+    child.on("error", () => {
+      clearTimeout(timer);
+      resolve({ code: -1, stdout, stderr, timedOut });
+    });
+  });
+}
+
+/** Crash-retry policy (external AI can crash or drop mid-stream): one retry on a
+ * crash, never on a deadline kill — a wedge twice over is not worth the budget. */
+export async function runPhaseCommand(
+  cmd: string,
+  args: string[],
+  cwd: string,
+  deadlineMs: number,
+): Promise<CaptureResult> {
+  for (let attempt = 1; ; attempt++) {
+    const r = await spawnCapture(cmd, args, cwd, deadlineMs);
+    if (r.timedOut) throw new Error(`${cmd} exceeded the phase deadline and was killed`);
+    if (r.code === 0) return r;
+    if (attempt >= 2) throw new Error(`${cmd} rc=${r.code} after ${attempt} attempts: ${r.stderr.slice(0, 300)}`);
+  }
+}
+
 /** omp-style duration to ms: "30m", "1h", bare seconds. null = unparseable. */
 export function parseDuration(v: string): number | null {
   const m = v.match(/^(\d+)([smh]?)$/);
@@ -151,26 +205,11 @@ async function phase(
   const promptPath = join(repo, `.leveret-prompt-${Math.random().toString(36).slice(2, 8)}.md`);
   await writeFile(promptPath, prompt);
   // Outer deadline, belt over omp's own --max-time suspenders: a wedged omp has
-  // been observed sailing past its internal timer (31m against a 30m cap), so the
-  // runner enforces max-time + 5 minutes itself and the review fails LOUDLY
-  // (crash comment + runId) instead of hanging forever.
+  // been observed sailing past its internal timer, so the runner enforces
+  // max-time + 5 minutes itself; crashes retry once (runPhaseCommand).
   const maxTime = args.find((a) => a.startsWith("--max-time="))?.slice("--max-time=".length) ?? "30m";
   const deadlineMs = (parseDuration(maxTime) ?? 1_800_000) + 300_000;
-  const r = await new Promise<{ stdout: string; code: number | null; signal: string | null }>((resolve, reject) => {
-    execFile(
-      "omp",
-      [...args, `--config=${overlayPath}`, `@${promptPath}`],
-      { cwd: repo, maxBuffer: 256 * 1024 * 1024, timeout: deadlineMs },
-      (err, stdout) => {
-        const e = err as (NodeJS.ErrnoException & { signal?: string; killed?: boolean }) | null;
-        if (e?.killed || (e && typeof e.signal === "string" && e.signal)) {
-          reject(new Error(`omp exceeded the phase deadline (${maxTime} + 5m slack) and was killed`));
-          return;
-        }
-        resolve({ stdout: stdout ?? "", code: e ? -1 : 0, signal: e?.signal ?? null });
-      },
-    );
-  });
+  const r = await runPhaseCommand("omp", [...args, `--config=${overlayPath}`, `@${promptPath}`], repo, deadlineMs);
   return parseOmpEvents(r.stdout);
 }
 
