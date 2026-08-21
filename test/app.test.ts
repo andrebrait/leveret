@@ -146,6 +146,14 @@ describe("rendering", () => {
   });
 });
 
+describe("brand casing", () => {
+  it("published surfaces say Leveret, never lowercase leveret", () => {
+    const md = renderWalkthrough(verifyOutput, scanResult);
+    expect(md).toContain("## Leveret review");
+    expect(md).not.toMatch(/(^|[^-.\/`a-zA-Z])leveret/);
+  });
+});
+
 describe("acknowledgement messages", () => {
   it("the ack names the commit and sets expectations, in Leveret's own voice", async () => {
     const { ackMessage } = await import("../src/app/render.js");
