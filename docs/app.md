@@ -48,9 +48,19 @@ node dist/app/server.js
 proxy the whole server, setup page included). Only with smee — which relays
 webhooks, nothing else — browse the server directly instead:
 `http://SERVER-ADDRESS:8090/setup`, where SERVER-ADDRESS is `127.0.0.1` on the
-machine itself or its LAN/VPN address from elsewhere. Click **Create the App on
-GitHub**, confirm, then follow the install link and pick your repositories.
-(Add `?org=NAME` to the setup URL for an organization-owned App.)
+machine itself or its LAN/VPN address from elsewhere. (Add `?org=NAME` to the setup
+URL for an organization-owned App — it also pre-fills the name.)
+
+The page asks for your account or organization handle, because GitHub App names are
+unique across all of GitHub: only one App anywhere can be called plain `Leveret`.
+Leading with the word is what keeps the branding — `Leveret acme` posts its reviews
+as `leveret-acme[bot]`. Click **Create the App on GitHub** and confirm (GitHub's own
+screen lets you edit the name once more).
+
+Back on the server, the confirmation page has the last two steps: upload the Leveret
+logo as the App's avatar — GitHub App manifests carry no avatar field, so this one is
+manual, and it is the logo that appears beside every review comment — and install the
+App on your repositories.
 
 **5. Open a pull request.** Done — the review arrives as inline comments plus a
 walkthrough summary.
@@ -133,7 +143,9 @@ secret — all owned by you, created by the setup flow, never leaving the machin
 ### Manual App creation (alternative to /setup)
 
 1. GitHub → Settings → Developer settings → GitHub Apps → New GitHub App.
-2. Webhook URL: your public URL from step 2; set a webhook secret
+2. Name it `Leveret <your-handle>` (names are globally unique; the prefix is what
+   keeps reviews signed `leveret-…[bot]`), and upload `assets/logo.png` as the
+   avatar. Webhook URL: your public URL from step 2; set a webhook secret
    (`openssl rand -hex 32`).
 3. Repository permissions: **Pull requests: Read & write**, **Contents: Read-only**.
    Events: **Pull request**, **Pull request review comment**.

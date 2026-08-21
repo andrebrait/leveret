@@ -8,6 +8,7 @@ import { join } from "node:path";
 
 export interface Manifest {
   name: string;
+  description: string;
   url: string;
   hook_attributes: { url: string };
   redirect_url: string;
@@ -16,7 +17,15 @@ export interface Manifest {
   default_events: string[];
 }
 
-export function buildManifest(hookUrl: string, redirectBase: string, name = "Leveret"): Manifest {
+/** GitHub App names are unique ACROSS GitHub and capped at 34 characters, so a
+ * self-hoster cannot register a second App called "Leveret". Branding survives as
+ * the leading word instead: "Leveret acme" slugs to `leveret-acme`, and every
+ * review the App posts is signed `leveret-acme[bot]`. */
+export function brandName(owner?: string): string {
+  return `Leveret ${(owner ?? "").trim()}`.trim().slice(0, 34);
+}
+
+export function buildManifest(hookUrl: string, redirectBase: string, name = brandName()): Manifest {
   // hookUrl is where GitHub DELIVERS WEBHOOKS (tunnel or smee channel);
   // redirectBase is where the USER'S BROWSER returns after creation — the browser
   // sits next to the server, so this stays local. smee relays webhook POSTs only:
@@ -25,6 +34,8 @@ export function buildManifest(hookUrl: string, redirectBase: string, name = "Lev
   const redirect = redirectBase.replace(/\/+$/, "");
   return {
     name,
+    description:
+      "Leveret — self-hosted code review. The engine, the checkout and the model credentials stay on the owner's infrastructure; nothing about the reviewed code leaves it.",
     url: "https://github.com/andrebrait/leveret",
     hook_attributes: { url: `${hook}/` },
     redirect_url: `${redirect}/setup/callback`,
@@ -34,27 +45,86 @@ export function buildManifest(hookUrl: string, redirectBase: string, name = "Lev
   };
 }
 
+const PAGE_HEAD = `<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+ body { font-family: system-ui, sans-serif; max-width: 42rem; margin: 3rem auto; padding: 0 1.5rem;
+        line-height: 1.5; color: #1c1c1e; background: #fbfaf8; }
+ img.logo { width: 8rem; display: block; margin: 0 auto 1rem; }
+ h1 { text-align: center; font-weight: 650; margin: 0 0 .25rem; }
+ p.tag { text-align: center; color: #6a6a70; margin: 0 0 2rem; }
+ label { display: block; font-weight: 600; margin: 1.5rem 0 .35rem; }
+ input[type=text] { width: 100%; padding: .55rem .7rem; font-size: 1rem; border: 1px solid #cfcbc4;
+        border-radius: .4rem; box-sizing: border-box; }
+ small { color: #6a6a70; display: block; margin-top: .4rem; }
+ button { margin-top: 1.75rem; font-size: 1.05rem; font-weight: 600; padding: .65rem 1.5rem;
+        border: 0; border-radius: .4rem; background: #3d9e6a; color: #fff; cursor: pointer; }
+ ol { padding-left: 1.2rem; } li { margin: .6rem 0; }
+</style>`;
+
 export function renderSetupPage(
   hookUrl: string,
   redirectBase: string,
   state: string,
   org?: string,
 ): string {
-  const manifest = JSON.stringify(buildManifest(hookUrl, redirectBase));
+  const manifest = JSON.stringify(buildManifest(hookUrl, redirectBase, brandName(org)));
   const action = org
     ? `https://github.com/organizations/${org}/settings/apps/new?state=${state}`
     : `https://github.com/settings/apps/new?state=${state}`;
   return `<!doctype html>
-<html><head><title>Leveret setup</title></head>
-<body style="font-family: system-ui; max-width: 40rem; margin: 4rem auto;">
+<html><head><title>Set up Leveret</title>${PAGE_HEAD}</head>
+<body>
+  <img class="logo" src="/assets/logo.svg" alt="Leveret">
   <h1>Set up Leveret</h1>
-  <p>This creates a GitHub App <strong>owned by you</strong>, with its webhook already
-  pointing at this server. GitHub will show one confirmation screen; the credentials
-  come back here and are stored on this machine only.</p>
+  <p class="tag">A GitHub App <strong>owned by you</strong>, pointed at <strong>this</strong> server.</p>
+  <p>GitHub will show one confirmation screen. The App is created under your account,
+  its webhook already points here, and the credentials it returns are written to this
+  machine only — Leveret has no hosted side to send them to.</p>
   <form action="${action}" method="post">
     <input type="hidden" name="manifest" value='${manifest.replaceAll("'", "&#39;")}'>
-    <button type="submit" style="font-size: 1.2rem; padding: .5rem 1.5rem;">Create the App on GitHub</button>
+    <label for="owner">Name it after your account or organization</label>
+    <input type="text" id="owner" name="owner" value="${(org ?? "").replaceAll('"', "&quot;")}" placeholder="acme" autocomplete="off">
+    <small>App names are unique across GitHub, so only one App anywhere can be called
+    plain “Leveret”. Keeping the word in front is what preserves the branding: “Leveret
+    acme” posts its reviews as <code>leveret-acme[bot]</code>. You can still edit the
+    name on GitHub's confirmation screen.</small>
+    <button type="submit">Create the App on GitHub</button>
   </form>
+  <script>
+   const f = document.forms[0];
+   f.addEventListener("submit", () => {
+     const m = JSON.parse(f.manifest.value);
+     m.name = ("Leveret " + f.owner.value.trim()).trim().slice(0, 34);
+     f.manifest.value = JSON.stringify(m);
+   });
+  </script>
+</body></html>`;
+}
+
+/** After the credentials land: the two things GitHub's manifest flow cannot do for
+ * us. The manifest schema has no avatar field, so the hare that appears beside every
+ * review comment has to be uploaded by hand — one click, and it is the branding
+ * users actually see on a pull request. */
+export function renderCallbackPage(htmlUrl: string, org?: string): string {
+  const slug = htmlUrl.replace(/\/+$/, "").split("/").pop() ?? "";
+  const settings = org
+    ? `https://github.com/organizations/${org}/settings/apps/${slug}`
+    : `https://github.com/settings/apps/${slug}`;
+  return `<!doctype html>
+<html><head><title>Leveret is yours</title>${PAGE_HEAD}</head>
+<body>
+  <img class="logo" src="/assets/logo.svg" alt="Leveret">
+  <h1>The App is yours</h1>
+  <p class="tag">Credentials stored on this machine, mode 0600. Two steps left.</p>
+  <ol>
+    <li><strong>Give it its face.</strong> <a href="/assets/logo.png" download>Download the logo</a>,
+    then upload it under <em>Display information</em> in
+    <a href="${settings}" target="_blank" rel="noreferrer">the App's settings</a>.
+    GitHub App manifests carry no avatar field, so this one is manual — and it is the
+    logo that shows up beside every review comment.</li>
+    <li><strong><a href="${htmlUrl}/installations/new" target="_blank" rel="noreferrer">Install it on your repositories</a></strong>,
+    then open a pull request.</li>
+  </ol>
 </body></html>`;
 }
 
