@@ -57,7 +57,9 @@ Return only a JSON object; no prose around it:
       "title": "fail-open when the manifest entry is missing",
       "claim": "what is wrong, stated falsifiably",
       "impact": "what breaks, for whom, under what input",
-      "evidence_hint": "the command or code path the verifier should use to confirm"
+      "evidence_hint": "the command or code path the verifier should use to confirm",
+      "scope": "in-diff",
+      "correlation": "only for out-of-diff concerns: why this connects to the change — same symbol, same copied pattern, downstream of a changed contract"
     }
   ],
   "coverage": {
@@ -83,3 +85,9 @@ its outcome even when clean: the report must show what was checked, not only wha
 was found. Raise concerns in files outside the diff with the same shape (list such
 files in `files` too). An empty concerns array is a valid result; do not invent
 concerns to look useful.
+
+Out-of-diff concerns (`"scope": "out-of-diff"`) are wanted, not tolerated: a defect
+in untouched code that is *correlated* with this change — the same symbol the diff
+modifies, another copy of the pattern the diff fixes, a consumer of a contract the
+diff alters — belongs in the review. Every out-of-diff concern must state its
+`correlation`; an uncorrelated drive-by belongs in a separate report, not this one.

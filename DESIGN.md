@@ -157,6 +157,15 @@ Beside the inline findings, every review leaves a **walkthrough summary comment*
 - the engine table (status, found/kept counts), suppression tallies with reasons,
   `preExisting` count, base-pass errors, and the reminders section.
 
+**Out-of-diff findings are a first-class category**: defects in untouched code that
+correlate with the change (the symbol the diff modifies, another copy of the pattern
+the diff fixes, a consumer of an altered contract). They carry `scope:
+"out-of-diff"` plus a stated `correlation`, render in their own summary section
+(GitHub cannot inline them on the diff), and are never dropped merely for being
+outside the diff. Distinct from *reminders*: reminders are pre-existing mechanical
+engine findings adjacent to changed lines; out-of-diff findings are agent-discovered
+and correlation-driven, any distance away.
+
 The principle throughout: the report shows **what was checked**, not only what was
 found — a clean review must be distinguishable from a shallow one. The data for all
 of this already exists in the verify output object (`report` + `verdicts` +

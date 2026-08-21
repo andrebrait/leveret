@@ -45,6 +45,8 @@ Return only JSON; no prose around it:
       "title": "fail-open when the manifest entry is missing",
       "tier": "major",
       "severity": "error",
+      "scope": "in-diff",
+      "correlation": "only for out-of-diff items: why this connects to the change",
       "evidence": "command + output, or cited current code",
       "suggested_fix": "optional, concrete"
     }
@@ -65,6 +67,12 @@ the engine's mechanical `severity`:
 - `"major"` — a real defect with concrete impact; should be fixed in this PR.
 - `"minor"` — real but low-impact; fine to fix here or in a follow-up.
 - `"nit"` — polish; never blocks anything.
+
+`"scope": "out-of-diff"` items are verified and reported like any other — being
+outside the diff is never grounds to drop a correlated defect (verify the stated
+`correlation` too; if the connection to this change does not hold, the item may
+still be real but belongs in a separate report). In the published output they render
+in their own section, since GitHub cannot attach them inline to the diff.
 
 Order `report` by tier, most severe first. `report` holds only `actionable` items.
 `verdicts` holds every concern and lead you judged, so nothing is silently dropped —
