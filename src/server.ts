@@ -15,7 +15,9 @@ server.registerTool(
   {
     description:
       "Run the applicable static-analysis engines (semgrep security rules, gitleaks secrets, " +
-      "shellcheck, ruff, actionlint) over a change set and return normalized findings. " +
+      "shellcheck, ruff, actionlint, zizmor, osv-scanner, typos, jscpd, custom SARIF) over a " +
+      "change set and return normalized findings plus per-engine status " +
+      "(findings | clean | filtered | not-applicable | missing | error, with found/kept counts). " +
       "Findings are review LEADS, not verdicts: validate each against current code. " +
       "Give either base (git ref; scans base...HEAD changed files, secrets over base..HEAD " +
       "commits) or an explicit files list (repo-relative). A .leveret.yml profile in the " +

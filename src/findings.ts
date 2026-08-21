@@ -13,12 +13,22 @@ export interface Finding {
   provenance?: "introduced" | "pre-existing";
 }
 
-export type EngineStatus = "findings" | "clean" | "not-applicable" | "missing" | "error";
+export type EngineStatus =
+  | "findings"
+  | "clean"
+  | "filtered" // the engine found things, but every one was dropped by delta/profile/memory
+  | "not-applicable"
+  | "missing"
+  | "error";
 
 export interface EngineReport {
   engine: string;
   status: EngineStatus;
   detail?: string;
+  /** raw findings the engine produced, before any filter layer */
+  found?: number;
+  /** findings surviving delta + profile + memory — what the result actually shows */
+  kept?: number;
 }
 
 export interface ScanResult {

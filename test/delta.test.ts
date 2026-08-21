@@ -54,6 +54,21 @@ describe("delta scan", () => {
     expect(result.preExisting).toBe(0);
   });
 
+  it("an engine whose findings were all filtered away reports 'filtered', not 'findings'", async () => {
+    // base == head tree: every finding is pre-existing, delta drops them all.
+    const result = await scan({ repo, files: ["app.py"], base: "HEAD", engines: ["ruff"] });
+    expect(result.findings).toEqual([]);
+    expect(result.preExisting).toBe(2);
+    expect(result.engines).toEqual([
+      { engine: "ruff", status: "filtered", found: 2, kept: 0 },
+    ]);
+  });
+
+  it("kept/found counts surface on engines that keep findings", async () => {
+    const result = await scan({ repo, base: "base", engines: ["ruff"] });
+    expect(result.engines).toEqual([{ engine: "ruff", status: "findings", found: 2, kept: 1 }]);
+  });
+
   it("files-mode scans have no base to compare against: everything is introduced", async () => {
     const result = await scan({ repo, files: ["app.py"], engines: ["ruff"] });
     expect(result.findings).toHaveLength(2);

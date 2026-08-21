@@ -56,7 +56,14 @@ async function runEngines(
           }
         }
         findings.push(...found);
-        reports?.push({ engine: engine.id, status: found.length > 0 ? "findings" : "clean" });
+        // Status is finalized post-filter in scan(): an engine whose findings all
+        // get dropped by delta/profile/memory must not read as "findings".
+        reports?.push({
+          engine: engine.id,
+          status: found.length > 0 ? "findings" : "clean",
+          found: found.length,
+          kept: found.length,
+        });
       } catch (err) {
         reports?.push({ engine: engine.id, status: "error", detail: String(err).slice(0, 500) });
       }
@@ -123,6 +130,11 @@ export async function scan(opts: {
   const { kept, suppressed: byMemory } = await applyMemory(opts.repo, afterProfile);
   const suppressed = [...byProfile, ...byMemory].sort((a, b) => a.rule.localeCompare(b.rule));
   kept.sort((a, b) => a.file.localeCompare(b.file) || a.line - b.line);
+  for (const r of reports) {
+    if (r.found === undefined) continue; // not-applicable / missing / error ran nothing
+    r.kept = kept.filter((f) => f.engine === r.engine).length;
+    r.status = r.kept > 0 ? "findings" : r.found > 0 ? "filtered" : "clean";
+  }
   reports.sort((a, b) => a.engine.localeCompare(b.engine));
   return { findings: kept, engines: reports, suppressed, preExisting };
 }
