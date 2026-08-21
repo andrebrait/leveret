@@ -1,7 +1,7 @@
 import { existsSync, realpathSync } from "node:fs";
 import { join, matchesGlob, resolve } from "node:path";
 import { parseSarif } from "./sarif.js";
-import { baseFindingKeys, findingKey } from "./delta.js";
+import { baseFindingKeys, consumeKey, findingKey } from "./delta.js";
 import { ENGINES, which, type Engine, type ScanContext } from "./engines/registry.js";
 import { run } from "./exec.js";
 import type { EngineReport, Finding, ScanResult } from "./findings.js";
@@ -19,20 +19,43 @@ export async function changedFiles(repo: string, base: string): Promise<string[]
   return r.stdout.split("\0").filter(Boolean);
 }
 
+/** base path -> head path for renames, so a renamed file's base findings keep
+ * matching under the head name instead of resurfacing as "introduced" */
+export async function renamedFiles(repo: string, base: string): Promise<Map<string, string>> {
+  const r = await run(
+    "git",
+    ["diff", "--name-status", "-z", "-M", "--diff-filter=R", `${base}...HEAD`],
+    repo,
+  );
+  if (r.code !== 0) throw new Error(`git diff failed: ${r.stderr.slice(0, 500)}`);
+  // -z format: R<score>\0old\0new\0 ...
+  const parts = r.stdout.split("\0").filter(Boolean);
+  const map = new Map<string, string>();
+  for (let i = 0; i + 2 < parts.length + 1; i += 3) {
+    if (parts[i]?.startsWith("R") && parts[i + 1] && parts[i + 2]) {
+      map.set(parts[i + 1]!, parts[i + 2]!);
+    }
+  }
+  return map;
+}
+
 /** Run every applicable engine over one tree. The single engine-execution path —
  * the head scan and the delta base scan both go through here. */
 async function runEngines(
   ctx: ScanContext,
   profile: Profile,
   wanted: Engine[],
+  headRepo: string,
   reports?: EngineReport[],
 ): Promise<Finding[]> {
   const findings: Finding[] = [];
   await Promise.all(
     wanted.map(async (engine) => {
-      // Rule packs resolve against the head repo: a base tree may predate them.
+      // Rule packs resolve against the HEAD repo, never ctx.repo: during the delta
+      // base pass ctx.repo is the base worktree, where a pack added by the change
+      // under review does not exist yet.
       const engineProfile = profile.engines[engine.id];
-      const rules = engineProfile?.rules?.map((r) => resolve(ctx.repo, r));
+      const rules = engineProfile?.rules?.map((r) => resolve(headRepo, r));
       const ectx: ScanContext = { ...ctx, rules, engineProfile };
       const selected = scopeFiles(profile, engine.id, engine.select(ectx));
       if (selected.length === 0) {
@@ -102,21 +125,40 @@ export async function scan(opts: {
   );
 
   const reports: EngineReport[] = [];
-  const findings = await runEngines({ repo: opts.repo, files, base: opts.base }, profile, wanted, reports);
+  const findings = await runEngines(
+    { repo: opts.repo, files, base: opts.base },
+    profile,
+    wanted,
+    opts.repo,
+    reports,
+  );
 
   // Delta: everything the base tree already produced is pre-existing. Range engines
   // (gitleaks) are inherently delta and deselect themselves without a base.
   let preExisting = 0;
+  let baseErrors: EngineReport[] = [];
   if (opts.base) {
-    const baseKeys = await baseFindingKeys(opts.repo, opts.base, (baseRepo) =>
+    const renames = await renamedFiles(opts.repo, opts.base);
+    const baseScan = await baseFindingKeys(opts.repo, opts.base, renames, (baseRepo, baseReports) =>
       runEngines(
-        { repo: baseRepo, files: files.filter((f) => existsSync(join(baseRepo, f))) },
+        {
+          repo: baseRepo,
+          // renamed files exist at base only under their OLD names — scan those too
+          files: [...files, ...renames.keys()].filter((f) => existsSync(join(baseRepo, f))),
+        },
         profile,
         wanted,
+        opts.repo,
+        baseReports,
       ),
     );
+    baseErrors = baseScan.errors;
     for (const f of findings) {
-      f.provenance = baseKeys.has(await findingKey(opts.repo, f)) ? "pre-existing" : "introduced";
+      // multiset consumption: a second identical bad line beyond the base count
+      // is a genuinely introduced defect, not a pre-existing one
+      f.provenance = consumeKey(baseScan.keys, await findingKey(opts.repo, f))
+        ? "pre-existing"
+        : "introduced";
     }
     if (opts.delta !== false) {
       preExisting = findings.filter((f) => f.provenance === "pre-existing").length;
@@ -136,5 +178,5 @@ export async function scan(opts: {
     r.status = r.kept > 0 ? "findings" : r.found > 0 ? "filtered" : "clean";
   }
   reports.sort((a, b) => a.engine.localeCompare(b.engine));
-  return { findings: kept, engines: reports, suppressed, preExisting };
+  return { findings: kept, engines: reports, suppressed, preExisting, baseErrors };
 }
