@@ -1,0 +1,8 @@
+# leveret reviewed by leveret.
+suppress:
+  - rule: typos/typo
+    paths: ["test/**"]
+    reason: test fixtures plant misspellings on purpose (engines2.test.ts typo plants)
+  - rule: typos/typo
+    paths: ["bench/results/**"]
+    reason: benchmark reports quote scanned material verbatim, including its typos and hyphenated words typos misreads ("mis-selected")
