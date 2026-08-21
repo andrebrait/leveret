@@ -33,35 +33,26 @@ Call leveret.learn with the ruling and my handle as author.
 ```mermaid
 flowchart TD
     subgraph client["💻 Your agent client — your model"]
-        direction TB
-        A["🤖 Agent"]:::agent
-        RP["🐇 review prompt<br>+ repo rulings"]:::agent
-        VP["⚖️ verify prompt<br>+ repo rulings"]:::agent
+        A["🤖 Agent, driving the<br>🐇 review / ⚖️ verify contracts"]:::agent
     end
 
     subgraph mcp["🔌 leveret MCP server"]
-        direction TB
-        SCAN["🔍 scan: engines + delta<br>+ profile + memory"]:::core
-        AST["🌳 ast_search"]:::core
-        CTX["📊 context"]:::core
-        MEM["🧠 remember / memory / learn"]:::core
+        direction LR
+        TOOLS["🔍 scan · 🌳 ast_search · 📊 context"]:::core
+        MEM["🧠 remember · memory · learn"]:::core
     end
 
     subgraph repo["📁 The reviewed repo"]
-        direction TB
-        PROF[".leveret.yml profile"]:::store
+        direction LR
+        CODE["working tree<br>+ code graph"]:::store
+        PROF[".leveret.yml"]:::store
         STORE[(".leveret/memory.jsonl")]:::store
-        CODE["working tree + code graph"]:::store
     end
 
-    A --> RP & VP
-    A --> SCAN --> CODE
-    SCAN --> PROF & STORE
-    A --> AST & CTX --> CODE
-    A --> MEM --> STORE
-    STORE -. rulings injected .-> RP & VP
-    classDef gh fill:#6ea8fe,stroke:#3d6fd9,color:#111
-    classDef tun fill:#ffc86b,stroke:#cc8f22,color:#111
+    A -- "prompts + tool calls" --> mcp
+    TOOLS -- "read code, apply<br>profile + memory" --> repo
+    MEM -- "write verdicts<br>+ conventions" --> STORE
+    STORE -. "rulings injected<br>into the contracts" .-> A
     classDef core fill:#7ed6a2,stroke:#3d9e6a,color:#111
     classDef agent fill:#c9a0f5,stroke:#9059d1,color:#111
     classDef store fill:#9fd8e3,stroke:#4d9aab,color:#111
