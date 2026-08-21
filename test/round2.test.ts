@@ -72,8 +72,8 @@ describe("description drift (R16)", () => {
 });
 
 describe("verify contract: unverifiable means dropped, never remembered (R15)", () => {
-  it("no false-positive-by-unverifiability path remains", () => {
-    const text = loadContract("verify", { repo: "r", base: "b" });
+  it("no false-positive-by-unverifiability path remains", async () => {
+    const text = await loadContract("verify", { repo: "r", base: "b" });
     expect(text).not.toMatch(/unverifiable as stated/);
     // dropped claims are excluded from remember, and the contract says so
     expect(text).toMatch(/never persist|do not persist|not remembered/i);
