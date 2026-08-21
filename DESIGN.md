@@ -118,10 +118,46 @@ Repo-scope memory lives **in the reviewed repo**, versioned and reviewable —
   store. Called by the verification agent (and by a human-driven session adopting a
   "won't fix" decision).
 - `memory {repo, query?}` — list/inspect entries, surface promotion candidates.
+- `learn {repo, thread}` (planned, priority over further benchmarking — owner,
+  2026-08-21) — ingest human feedback into memory: given a posted finding and the
+  human replies to it, extract the ruling (wrong / won't-fix-here / convention) into
+  a memory entry authored by the human. Two feeders: live PR threads on leveret's own
+  findings, and **historical mining** — where a leveret replay finding matches a
+  CodeRabbit finding in an old PR, the full comment history already contains the
+  maintainer's ruling on it; ingest that same feedback, giving leveret the identical
+  training signal CodeRabbit received.
 
 Deliberately not wrapped: code-graph queries (CodeGraph MCP exists), LSP diagnostics
 (client surface), shell probes (the driving agent already executes commands — leveret
 never needs its own sandbox because the agent *is* the sandbox).
+
+## Distribution: GitHub App + BYOAI (product decision, 2026-08-21)
+
+leveret ships as a **GitHub App** — install on a repo, PRs get reviewed, findings
+arrive as review comments with an interactive thread — while staying **BYOAI**: the
+model, its credentials, and the code never route through infrastructure the user
+does not control. The two requirements compose by splitting the app in half:
+
+- **The App layer** owns GitHub plumbing only: webhook receipt, check runs, posting
+  review comments, reading thread replies (the `learn` feed). It holds a GitHub App
+  key and nothing else — no model keys, no code storage.
+- **The runner layer** does the review: checks out the diff, runs the deterministic
+  engines, drives the review/verify agents against the user's provider (Anthropic or
+  OpenAI key, subscription OAuth, or an OpenAI-compatible local endpoint). It runs on
+  the user's hardware — their CI runner, a container, a box in the closet.
+
+Deployment modes, same code:
+
+1. **Fully self-hosted** (default, the privacy pitch): the user deploys both halves
+   from this repo — App via GitHub's app-manifest one-click flow, runner wherever
+   they like. Nothing leaves their perimeter.
+2. **Hosted App, customer runner** (optional later): a shared hosted App handles
+   webhooks and comment posting, but dispatches review jobs to the customer's
+   registered runner. The hosted half sees PR metadata, never model keys; review
+   content is produced and signed on the customer side.
+
+Either way the MCP surface stays the local/interactive interface; the App is a
+second consumer of the same engine + agent-contract code, not a fork of it.
 
 ## Agent pipeline
 
