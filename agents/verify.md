@@ -43,6 +43,16 @@ as `false-positive` would permanently suppress a possibly-real finding class. On
 verdicts carrying an actual refuting fact (`false-positive`) or a pricing rationale
 (`priced-noise`) are remembered. Do not pass unverified claims through to the report.
 
+## Previously posted findings (incremental re-review)
+
+When the input includes the bot's previous review findings on this PR, judge each
+one against the CURRENT head before anything else: has the code change actually
+addressed it? Verify with the same evidence bar as any claim — a committer's
+"fixed" reply is a lead, not proof. Emit a `"resolutions"` array in your output:
+`{"threadId", "status": "resolved" | "still-open", "note"}` — the note is one short
+sentence (what was verified, or what still fails). Do not re-report a still-open
+finding as a new item; it stays its thread's business.
+
 ## Output
 
 Return only JSON; no prose around it:
@@ -67,7 +77,10 @@ Return only JSON; no prose around it:
     { "id": "R1", "grade": "actionable" },
     { "id": "R2", "grade": "false-positive", "reason": "guarded two lines above" }
   ],
-  "coverage": { "lenses": [], "files": [] }
+  "coverage": { "lenses": [], "files": [] },
+  "resolutions": [
+    { "threadId": "T1", "status": "resolved", "note": "attempts now counts total invocations; probe re-run confirms 3 calls for attempts: 3" }
+  ]
 }
 ```
 
