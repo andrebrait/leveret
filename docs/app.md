@@ -44,9 +44,13 @@ LEVERET_RUNNER=leveret-runner-omp \
 node dist/app/server.js
 ```
 
-**4. Create your App:** open <http://127.0.0.1:8090/setup> in a browser, click
-**Create the App on GitHub**, confirm, then follow the install link and pick your
-repositories. (Add `?org=NAME` to the setup URL for an organization-owned App.)
+**4. Create your App:** open `https://YOUR-PUBLIC-URL/setup` in a browser (tunnels
+proxy the whole server, setup page included). Only with smee — which relays
+webhooks, nothing else — browse the server directly instead:
+`http://SERVER-ADDRESS:8090/setup`, where SERVER-ADDRESS is `127.0.0.1` on the
+machine itself or its LAN/VPN address from elsewhere. Click **Create the App on
+GitHub**, confirm, then follow the install link and pick your repositories.
+(Add `?org=NAME` to the setup URL for an organization-owned App.)
 
 **5. Open a pull request.** Done — the review arrives as inline comments plus a
 walkthrough summary.
