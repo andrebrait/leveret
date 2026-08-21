@@ -1,7 +1,8 @@
 #!/usr/bin/env node
+import { randomBytes } from "node:crypto";
 import { execFile } from "node:child_process";
-import { appendFile, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
-import { createServer } from "node:http";
+import { appendFile, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
@@ -9,6 +10,13 @@ import { scan } from "../scan.js";
 import type { Finding, ScanResult } from "../findings.js";
 import { ensureGraph } from "./graph.js";
 import { makeApp, postReview } from "./github.js";
+import {
+  convertManifestCode,
+  loadCredentials,
+  renderSetupPage,
+  saveCredentials,
+  type AppCredentials,
+} from "./manifest.js";
 import { renderInline, renderWalkthrough, type Tier, type VerifyOutput } from "./render.js";
 import { routeEvent, verifySignature, type Job } from "./webhook.js";
 
@@ -16,14 +24,12 @@ import { routeEvent, verifySignature, type Job } from "./webhook.js";
 // never a model credential. The BYOAI seam is LEVERET_RUNNER: a user-supplied
 // command (their agent, their provider, their hardware) that turns scan leads into
 // a verified report. Without one, reviews run deterministic-only.
+//
+// Unconfigured servers boot into SETUP MODE: /setup drives GitHub's App Manifest
+// flow, creating an App the USER owns (webhook pre-pointed here) and storing the
+// returned credentials on this machine only.
 
 const exec = promisify(execFile);
-
-const env = (name: string): string => {
-  const v = process.env[name];
-  if (!v) throw new Error(`missing env ${name}`);
-  return v;
-};
 
 const DATA_DIR = process.env.LEVERET_DATA ?? join(homedir(), ".leveret-app");
 
@@ -55,7 +61,7 @@ function reportFromScan(result: ScanResult): VerifyOutput {
   };
 }
 
-async function reviewJob(job: Extract<Job, { kind: "review" }>): Promise<void> {
+async function reviewJob(job: Extract<Job, { kind: "review" }>, creds: AppCredentials): Promise<void> {
   const work = await mkdtemp(join(tmpdir(), "leveret-app-"));
   try {
     await exec("git", ["clone", "--quiet", job.cloneUrl, work]);
@@ -76,7 +82,13 @@ async function reviewJob(job: Extract<Job, { kind: "review" }>): Promise<void> {
       const r = await exec(cmd, args, {
         cwd: work,
         maxBuffer: 64 * 1024 * 1024,
-        env: { ...process.env, LEVERET_REPO: work, LEVERET_BASE: base, LEVERET_LEADS: leadsPath, LEVERET_GRAPH: graph.ok ? "1" : "0" },
+        env: {
+          ...process.env,
+          LEVERET_REPO: work,
+          LEVERET_BASE: base,
+          LEVERET_LEADS: leadsPath,
+          LEVERET_GRAPH: graph.ok ? "1" : "0",
+        },
       });
       verify = JSON.parse(r.stdout) as VerifyOutput;
     } else {
@@ -84,10 +96,7 @@ async function reviewJob(job: Extract<Job, { kind: "review" }>): Promise<void> {
     }
 
     if (job.installationId) {
-      const app = makeApp({
-        appId: env("LEVERET_APP_ID"),
-        privateKey: await readFile(env("LEVERET_PRIVATE_KEY_PATH"), "utf8"),
-      });
+      const app = makeApp({ appId: creds.appId, privateKey: creds.privateKey });
       await postReview(
         app,
         job.installationId,
@@ -115,15 +124,72 @@ async function learnFeedJob(job: Extract<Job, { kind: "learn-feed" }>): Promise<
   );
 }
 
-export function main(): void {
-  const secret = env("LEVERET_WEBHOOK_SECRET");
+function publicUrl(req: IncomingMessage, port: number): string {
+  return process.env.LEVERET_PUBLIC_URL ?? `http://${req.headers.host ?? `127.0.0.1:${port}`}`;
+}
+
+function html(res: ServerResponse, code: number, body: string): void {
+  res.writeHead(code, { "content-type": "text/html; charset=utf-8" }).end(body);
+}
+
+export async function main(): Promise<void> {
+  let creds = await loadCredentials(DATA_DIR, process.env);
   const port = Number(process.env.PORT ?? 8090);
+  const setupStates = new Set<string>();
+
   const server = createServer((req, res) => {
+    const url = new URL(req.url ?? "/", "http://x");
+
+    if (req.method === "GET" && url.pathname === "/setup") {
+      if (creds) {
+        html(res, 200, "<p>Leveret is already configured. Delete the credentials in the data dir to re-run setup.</p>");
+        return;
+      }
+      const state = randomBytes(16).toString("hex");
+      setupStates.add(state);
+      html(res, 200, renderSetupPage(publicUrl(req, port), state, url.searchParams.get("org") ?? undefined));
+      return;
+    }
+
+    if (req.method === "GET" && url.pathname === "/setup/callback") {
+      const code = url.searchParams.get("code");
+      const state = url.searchParams.get("state");
+      if (!code || !state || !setupStates.delete(state)) {
+        html(res, 400, "<p>Invalid or expired setup state; start again at /setup.</p>");
+        return;
+      }
+      convertManifestCode(code)
+        .then(async (c) => {
+          await saveCredentials(DATA_DIR, c);
+          creds = await loadCredentials(DATA_DIR, process.env);
+          html(
+            res,
+            200,
+            `<p>Done — the App is yours. <a href="${c.htmlUrl}/installations/new">Install it on your repositories</a> and open a pull request.</p>`,
+          );
+        })
+        .catch((err) => html(res, 500, `<p>Setup failed: ${String(err)}</p>`));
+      return;
+    }
+
+    if (req.method !== "POST") {
+      html(
+        res,
+        creds ? 200 : 503,
+        creds ? "<p>Leveret is running.</p>" : '<p>Unconfigured — go to <a href="/setup">/setup</a>.</p>',
+      );
+      return;
+    }
+
     const chunks: Buffer[] = [];
     req.on("data", (c: Buffer) => chunks.push(c));
     req.on("end", () => {
+      if (!creds) {
+        res.writeHead(503).end();
+        return;
+      }
       const body = Buffer.concat(chunks).toString("utf8");
-      if (!verifySignature(secret, body, req.headers["x-hub-signature-256"] as string | undefined)) {
+      if (!verifySignature(creds.webhookSecret, body, req.headers["x-hub-signature-256"] as string | undefined)) {
         res.writeHead(401).end();
         return;
       }
@@ -136,11 +202,21 @@ export function main(): void {
       }
       res.writeHead(202).end(); // ack fast; work happens after
       if (!job) return;
-      const run = job.kind === "review" ? reviewJob(job) : learnFeedJob(job);
+      const activeCreds = creds;
+      const run = job.kind === "review" ? reviewJob(job, activeCreds) : learnFeedJob(job);
       run.catch((err) => console.error(`${job!.kind} job failed:`, err));
     });
   });
-  server.listen(port, () => console.log(`leveret app listening on :${port}`));
+  server.listen(port, () =>
+    console.log(
+      creds
+        ? `leveret app listening on :${port}`
+        : `leveret app UNCONFIGURED — open http://127.0.0.1:${port}/setup to create your GitHub App`,
+    ),
+  );
 }
 
-main();
+main().catch((err) => {
+  console.error(err);
+  process.exit(1);
+});
