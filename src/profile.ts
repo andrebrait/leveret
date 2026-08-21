@@ -14,6 +14,8 @@ export interface EngineProfile {
   severityFloor?: Severity;
   /** engine-specific rule packs: semgrep config files, ast-grep sgconfig */
   rules?: string[];
+  /** semgrep: false disables registry (p/) rulesets — fully offline with local packs only */
+  registry?: boolean;
   /** jscpd: repo-wide globs forming the duplication corpus; enables the engine */
   corpus?: string[];
   /** jscpd: duplication threshold (default 50) */
