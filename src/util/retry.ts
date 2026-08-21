@@ -8,6 +8,8 @@ export interface RetryOpts {
   attempts: number;
   /** base backoff in ms; doubles between attempts, never sleeps after the last */
   backoffMs: number;
+  /** injectable for tests; defaults to a real timer */
+  sleep?: (ms: number) => Promise<void>;
 }
 
 export async function withRetry<T>(fn: () => Promise<T>, opts: RetryOpts): Promise<T> {
@@ -21,7 +23,8 @@ export async function withRetry<T>(fn: () => Promise<T>, opts: RetryOpts): Promi
     } catch (err) {
       lastErr = err;
       if (i < opts.attempts - 1) {
-        await new Promise((r) => setTimeout(r, opts.backoffMs * 2 ** i));
+        const sleep = opts.sleep ?? ((ms: number) => new Promise<void>((res) => setTimeout(res, ms)));
+        await sleep(opts.backoffMs * 2 ** i);
       }
     }
   }

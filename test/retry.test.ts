@@ -16,12 +16,24 @@ describe("withRetry", () => {
     expect(calls).toHaveLength(3);
   });
 
-  it("does not sleep after the final failure (R3)", async () => {
-    const calls: number[] = [];
-    const t0 = Date.now();
-    await expect(withRetry(failing(calls), { attempts: 2, backoffMs: 200 })).rejects.toThrow();
-    // one inter-attempt backoff (200ms), NO trailing 400ms sleep
-    expect(Date.now() - t0).toBeLessThan(390);
+  it("backoff is exponential and never runs after the final failure (R3; re-review R2/R4: deterministic via injected sleep)", async () => {
+    const delays: number[] = [];
+    const sleep = async (ms: number) => void delays.push(ms);
+    await expect(
+      withRetry(failing([]), { attempts: 3, backoffMs: 100, sleep }),
+    ).rejects.toThrow("boom-3");
+    // exactly TWO backoffs for three attempts (none after the last), doubling
+    expect(delays).toEqual([100, 200]);
+  });
+
+  it("preserves thrown Errors and wraps non-Error throwables (re-review R3)", async () => {
+    const sentinel = new Error("original");
+    await expect(
+      withRetry(async () => { throw sentinel; }, { attempts: 1, backoffMs: 1 }),
+    ).rejects.toBe(sentinel);
+    await expect(
+      withRetry(async () => { throw "stringy failure"; }, { attempts: 1, backoffMs: 1 }),
+    ).rejects.toThrow("stringy failure");
   });
 
   it("rejects invalid attempt counts loudly instead of throwing undefined or looping forever (R1)", async () => {
