@@ -175,11 +175,12 @@ export function doneMessage(v: VerifyOutput): string {
   ].join("\n");
 }
 
-export function failMessage(err: unknown): string {
+export function failMessage(err: unknown, runId?: string): string {
   return [
     `🐇 **Review failed** before it could post: \`${String(err).slice(0, 300)}\``,
     "",
-    `The server logs have the full story; push a new commit or re-open to retry.`,
+    `Run \`${runId ?? "unknown"}\` — the server logs carry that id on every line;`,
+    `push a new commit or re-open to retry.`,
   ].join("\n");
 }
 
