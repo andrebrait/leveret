@@ -200,6 +200,25 @@ Deployment modes, same code:
 Either way the MCP surface stays the local/interactive interface; the App is a
 second consumer of the same engine + agent-contract code, not a fork of it.
 
+### Runner standardization (owner decision, 2026-08-21)
+
+Prompt contracts alone do not standardize a reviewer: the harness (tool
+orchestration, system framing, output discipline) shapes the review as much as the
+model. The same ruling as the code graph applies — **the harness is part of the
+reviewer**, so the App's default runner pins one: `leveret-runner-omp`, built on
+omp.sh, harness version pinned, extras (its own LSP etc.) disabled — Serena stays
+the standardized LSP surface (read-only; we do not transform code, and future fix
+suggestions remain single-file `suggested_fix` text; revisit the Serena/omp-LSP
+swap only if omp's language breadth reaches ours). omp.sh's out-of-the-box
+subscription support is what keeps BYOAI intact at the provider level: the user
+picks provider + model, leveret picks everything else. Every published walkthrough
+records harness + version + model (the run-configuration line), so standardization
+is auditable. `LEVERET_RUNNER` stays as the escape hatch for bring-your-own-harness
+users — their reviews are labeled as such. The MCP + skill path (running reviews
+inside the user's own client, their harness by design) is deliberately NOT
+standardized: a human is present there to judge; consistency matters where reviews
+are autonomous and comparable.
+
 ## Agent pipeline
 
 ```
