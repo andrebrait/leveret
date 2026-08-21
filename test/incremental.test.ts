@@ -40,6 +40,14 @@ const gql = {
 };
 
 describe("parsePriorThreads", () => {
+  it("matches the bot across REST and GraphQL login spellings — GraphQL omits [bot]", () => {
+    const graphqlStyle = JSON.parse(JSON.stringify(gql));
+    graphqlStyle.data.repository.pullRequest.reviewThreads.nodes[0].comments.nodes[0].author.login = "andrebrait-s-leveret";
+    const prior = parsePriorThreads(graphqlStyle, "andrebrait-s-leveret[bot]");
+    expect(prior).toHaveLength(1);
+    expect(prior[0]!.threadId).toBe("T1");
+  });
+
   it("keeps only the bot's own unresolved threads", () => {
     const prior = parsePriorThreads(gql, "andrebrait-s-leveret[bot]");
     expect(prior).toHaveLength(1);
