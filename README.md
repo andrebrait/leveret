@@ -16,11 +16,12 @@ nothing leaves your infrastructure.
 
 ## How a review works
 
-```
-[PR diff] → scan: engines + delta vs base + profile + memory   (deterministic leads)
-          → review agent: five lenses, cross-file blast radius (falsifiable concerns)
-          → verification agent: refute-or-evidence, 3 grades   (only survivors publish)
-          → tiered findings + walkthrough report
+```mermaid
+flowchart LR
+    D[PR diff] --> S[scan<br>engines + delta vs base<br>+ profile + memory]
+    S -- leads --> R[review agent<br>five lenses,<br>cross-file blast radius]
+    R -- concerns --> V[verification agent<br>refute or evidence,<br>three grades]
+    V -- survivors only --> T[tiered findings<br>+ walkthrough report]
 ```
 
 1. **Deterministic first pass.** Engines run only against what the change touches:
@@ -63,7 +64,7 @@ nothing leaves your infrastructure.
 out the head, builds the code graph, runs the scan, drives the standardized runner,
 and posts the review — inline comments plus walkthrough. The App holds only a GitHub
 App key and webhook secret; model credentials live exclusively in the runner. Human
-replies on findings feed `learn`. Setup: [docs/app.md](docs/app.md).
+replies on findings feed `learn`. Getting started + diagram: [docs/app.md](docs/app.md).
 
 **Standardized runner.** `leveret-runner-omp` drives the review/verify contracts
 through a pinned omp.sh harness with fixed purity flags (no skills, extensions,
@@ -75,7 +76,8 @@ the escape hatch for bring-your-own-harness setups.
 
 **Interactive (MCP).** Register the server in any MCP-capable client and drive
 reviews yourself — the served `review`/`verify` prompts arrive with your repo's
-accumulated rulings substituted in:
+accumulated rulings substituted in (getting started + diagram:
+[docs/interactive.md](docs/interactive.md)):
 
 ```sh
 npm install && npm run build

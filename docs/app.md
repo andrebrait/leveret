@@ -1,99 +1,155 @@
-# Running leveret as a GitHub App
+# Leveret as a GitHub App
 
-The App layer owns GitHub plumbing only: webhook receipt, posting the review
-(walkthrough + tier-grouped inline comments), and capturing human replies for the
-`learn` feed. It holds a GitHub App key and a webhook secret — never a model
-credential and never a copy of your code beyond the job's throwaway clone. The
-model side stays BYOAI through the runner hook below.
+Autonomous reviews: install once, every pull request gets reviewed. Start with
+[Getting started](#getting-started); the [How it works](#how-it-works) section
+explains the moving parts and has the diagram.
 
-## Create the App (one-click manifest flow)
+## Getting started
 
-The easy path — the server creates the App for you:
+Prerequisites: Node 22+, git, the [reviewer toolbelt](../README.md#the-reviewer-toolbelt),
+and [omp.sh](https://omp.sh) authenticated with your provider.
 
-1. Start the server unconfigured (just `LEVERET_PUBLIC_URL` set to where GitHub
-   can reach you — a tunnel/smee URL is fine): `node dist/app/server.js`.
-2. Open `http://127.0.0.1:8090/setup` (add `?org=<name>` to create under an
-   organization) and click **Create the App on GitHub**.
-3. GitHub shows one confirmation screen, creates the App **under your account**
-   (webhook already pointing at your server), and redirects back; the credentials
-   are stored in the data dir on this machine only. Follow the install link and
-   pick your repositories. Done.
-
-Manual path (equivalent, if you prefer the form):
-
-1. GitHub → Settings → Developer settings → GitHub Apps → New GitHub App.
-2. Webhook URL: wherever GitHub can reach you — a NAT'd box needs no exposed port:
-   - testing: a [smee.io](https://smee.io) channel, relayed locally with
-     `npx smee -u <channel> -t http://127.0.0.1:8090/`;
-   - production: a tunnel (e.g. `cloudflared tunnel --url http://127.0.0.1:8090`)
-     whose public URL goes in this field.
-   Set a webhook secret either way.
-3. Permissions: **Pull requests: Read & write**, **Contents: Read**.
-   Subscribe to events: **Pull request**, **Pull request review comment**.
-4. Generate a private key; note the App ID. Install the App on your repos.
-5. Upload [`assets/logo.png`](../assets/logo.png) as the App logo.
-
-## Reviewer toolbelt (leveret's dependencies, not the reviewed repo's)
-
-The engines and the code graph are capabilities of the REVIEWER: leveret generates
-the graph into every checkout at exactly the reviewed commit, regardless of what
-the target repository ships. Install beside the server: `codegraph`, plus the
-engines you want live (`semgrep`, `gitleaks`, `shellcheck`, `ruff`, `actionlint`,
-`zizmor`, `osv-scanner`, `typos`, `jscpd`, `ast-grep`). A missing tool degrades
-loudly — the walkthrough reports which surfaces were live — but a review host
-should carry the full belt.
-
-## Run the server
+**1. Build:**
 
 ```sh
-LEVERET_APP_ID=12345 \
-LEVERET_PRIVATE_KEY_PATH=/etc/leveret/app.pem \
-LEVERET_WEBHOOK_SECRET=... \
+git clone https://github.com/andrebrait/leveret && cd leveret
+npm install && npm run build
+```
+
+**2. Make the machine reachable for webhooks** (pick one):
+
+Tailscale (recommended — stable URL, nothing else to run):
+
+```sh
+tailscale funnel --bg 8090
+```
+
+smee.io (quick test — needs the relay running):
+
+```sh
+npx -y smee-client -u https://smee.io/YOUR_CHANNEL -t http://127.0.0.1:8090/
+```
+
+cloudflared:
+
+```sh
+cloudflared tunnel --url http://127.0.0.1:8090
+```
+
+**3. Start the server** with the public URL from step 2:
+
+```sh
+LEVERET_PUBLIC_URL=https://YOUR-PUBLIC-URL \
+LEVERET_RUNNER=leveret-runner-omp \
 node dist/app/server.js
 ```
 
-Optional:
+**4. Create your App:** open <http://127.0.0.1:8090/setup> in a browser, click
+**Create the App on GitHub**, confirm, then follow the install link and pick your
+repositories. (Add `?org=NAME` to the setup URL for an organization-owned App.)
 
-- `PORT` (default 8090)
-- `LEVERET_DATA` (default `~/.leveret-app`) — where `learn-feed.jsonl` accrues human
-  replies on findings, raw, for agent-side `learn` ingestion.
-- `LEVERET_RUNNER` — the BYOAI seam, below.
+**5. Open a pull request.** Done — the review arrives as inline comments plus a
+walkthrough summary.
 
-On every PR open/push the server clones the head into a temp dir, runs the
-deterministic `scan` against the base (delta, profile, memory, reminders all apply),
-runs the runner if configured, and posts one review: the walkthrough summary as the
-review body, in-diff findings as inline comments.
+Optional runner tuning (details in [How it works](#how-it-works)):
 
-## The runner hook (BYOAI)
+```sh
+LEVERET_RUNNER="leveret-runner-omp --model gpt-5.6-sol --effort high"
+```
 
-`LEVERET_RUNNER` is a command executed in the job's checkout with:
+## How it works
 
-- `LEVERET_REPO` — the checkout path
-- `LEVERET_BASE` — the base ref to review against
-- `LEVERET_LEADS` — path to the scan result JSON
+```mermaid
+flowchart LR
+    subgraph GitHub
+        PR[Pull request<br>opened / pushed]
+        REV[Posted review:<br>tiered inline comments<br>+ walkthrough]
+        REPLY[Human reply<br>on a finding]
+    end
 
-It must print a verify-output JSON object (`report` with tiers/scopes, `verdicts`,
-`coverage` — see `agents/verify.md`) on stdout. Anything able to drive the
-review/verify contracts fits: a Claude Code invocation under your Max subscription
-or API key, a Codex/ChatGPT-backed client, or a local model behind an
-OpenAI-compatible endpoint. The App process never sees the provider credential —
-the runner command carries its own environment.
+    subgraph tunnel [Tunnel — funnel / smee / cloudflared]
+        T[public URL]
+    end
 
-The shipped default is `leveret-runner-omp` (set `LEVERET_RUNNER=leveret-runner-omp`):
-omp.sh headless with the purity flags fixed (no skills/extensions/rules/session/LSP,
-compaction off — the standardization) and the caller's choices flowing through CLI
-args or env (CLI wins): `--model`/`LEVERET_RUNNER_MODEL` (default gpt-5.6-sol),
-`--effort`/`LEVERET_RUNNER_EFFORT` (default high), `--provider`, `--max-time`, and
-`--omp-arg`/`LEVERET_RUNNER_OMP_ARGS` for provider-shaped passthrough (profile,
-api-key). The effective harness + model + thinking land in the walkthrough's
-run-configuration line. omp's subscription support carries the BYOAI matrix.
+    subgraph your [Your machine — leveret-app server]
+        WH[Webhook receiver<br>signature check]
+        CO[Throwaway checkout<br>of the PR head]
+        CG[Code graph<br>built at that commit]
+        SCAN[scan: engines + delta<br>+ profile + memory]
+        RUN[leveret-runner-omp<br>your model & credentials]
+        RA[Review agent<br>five lenses]
+        VA[Verification agent<br>refute or evidence]
+        FEED[learn-feed.jsonl]
+    end
 
-Without `LEVERET_RUNNER`, reviews are deterministic-only: engine findings post
-directly, and the walkthrough states plainly that the agent lenses did not run.
+    PR --> T --> WH --> CO --> CG --> SCAN --> RUN
+    RUN --> RA --> VA
+    VA --> REV
+    REPLY --> T --> WH --> FEED
+```
 
-## What feeds `learn`
+The pieces, left to right:
 
-Every human (non-bot) reply in a finding thread lands in
-`$LEVERET_DATA/learn-feed.jsonl`. An agent session ingests those into
-`.leveret/memory.jsonl` via the `learn` MCP tool — extraction of the ruling is agent
-work; the App only captures.
+- **Webhook receiver.** GitHub sends every PR event to your public URL; the tunnel
+  forwards it to the local server, which verifies the HMAC signature (the webhook
+  secret from setup) and acknowledges immediately. Only two event types are
+  subscribed: pull requests and replies on review comments.
+- **Checkout, graph, scan.** The server clones the PR head into a temp directory,
+  generates the code graph at exactly that commit (the graph is Leveret's own
+  capability — the reviewed repo needs nothing), and runs the deterministic engines
+  with delta scanning against the base: only findings the change introduced
+  survive, with everything dropped accounted for.
+- **The runner.** `leveret-runner-omp` drives two agent phases through a pinned
+  omp.sh harness — the review agent (five lenses, cross-file blast radius via the
+  graph) and the verification agent (tries to refute every concern; unverifiable
+  claims are dropped, not published). Your provider credentials live only here;
+  the App layer never sees them. Model, effort, and provider are yours to set —
+  the review's walkthrough records what actually ran.
+- **The review.** In-diff findings become inline comments grouped by tier;
+  out-of-diff findings, reminders, coverage, and the engine table land in the
+  walkthrough summary.
+- **The learn feed.** Human replies on findings are captured raw to
+  `learn-feed.jsonl` in the data dir; an agent session later ingests rulings into
+  the repo's review memory via the `learn` tool.
+
+Credentials on disk (`~/.leveret-app`, mode 0600): App ID, private key, webhook
+secret — all owned by you, created by the setup flow, never leaving the machine.
+
+### Manual App creation (alternative to /setup)
+
+1. GitHub → Settings → Developer settings → GitHub Apps → New GitHub App.
+2. Webhook URL: your public URL from step 2; set a webhook secret
+   (`openssl rand -hex 32`).
+3. Repository permissions: **Pull requests: Read & write**, **Contents: Read-only**.
+   Events: **Pull request**, **Pull request review comment**.
+4. Create, note the App ID, generate a private key, install on your repos.
+5. Start the server with explicit credentials (env beats stored):
+
+```sh
+LEVERET_APP_ID=12345 \
+LEVERET_PRIVATE_KEY_PATH=/path/to/app.pem \
+LEVERET_WEBHOOK_SECRET=... \
+LEVERET_RUNNER=leveret-runner-omp \
+node dist/app/server.js
+```
+
+### Runner reference
+
+`leveret-runner-omp` accepts CLI args (or `LEVERET_RUNNER_*` env vars; CLI wins):
+
+| flag | env | default |
+| --- | --- | --- |
+| `--model` | `LEVERET_RUNNER_MODEL` | `gpt-5.6-sol` |
+| `--effort` | `LEVERET_RUNNER_EFFORT` | `high` |
+| `--provider` | `LEVERET_RUNNER_PROVIDER` | omp default |
+| `--max-time` | `LEVERET_RUNNER_MAX_TIME` | `30m` per phase |
+| `--omp-arg` (repeatable) | `LEVERET_RUNNER_OMP_ARGS` | — |
+
+The purity flags (no skills, extensions, rules, sessions, or harness LSP;
+compaction off) are fixed — they are the standardization. A custom
+`LEVERET_RUNNER` command is the escape hatch for other harnesses; it receives
+`LEVERET_REPO`, `LEVERET_BASE`, `LEVERET_LEADS`, `LEVERET_GRAPH` and must print
+the verify-output JSON (see `agents/verify.md`).
+
+Without any runner configured, reviews are deterministic-only: engine findings
+post directly and the walkthrough says the agent lenses did not run.
