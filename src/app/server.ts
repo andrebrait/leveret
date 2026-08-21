@@ -124,8 +124,14 @@ async function learnFeedJob(job: Extract<Job, { kind: "learn-feed" }>): Promise<
   );
 }
 
-function publicUrl(req: IncomingMessage, port: number): string {
+/** where GitHub delivers webhooks: tunnel/smee channel, or the request host */
+function hookUrl(req: IncomingMessage, port: number): string {
   return process.env.LEVERET_PUBLIC_URL ?? `http://${req.headers.host ?? `127.0.0.1:${port}`}`;
+}
+
+/** where the browser returns after App creation: the host it is already on */
+function redirectBase(req: IncomingMessage, port: number): string {
+  return `http://${req.headers.host ?? `127.0.0.1:${port}`}`;
 }
 
 function html(res: ServerResponse, code: number, body: string): void {
@@ -147,7 +153,7 @@ export async function main(): Promise<void> {
       }
       const state = randomBytes(16).toString("hex");
       setupStates.add(state);
-      html(res, 200, renderSetupPage(publicUrl(req, port), state, url.searchParams.get("org") ?? undefined));
+      html(res, 200, renderSetupPage(hookUrl(req, port), redirectBase(req, port), state, url.searchParams.get("org") ?? undefined));
       return;
     }
 
