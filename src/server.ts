@@ -5,7 +5,7 @@ import { z } from "zod";
 import { astSearch } from "./astsearch.js";
 import { context } from "./context.js";
 import { loadContract } from "./prompts.js";
-import { memoryList, remember } from "./memory.js";
+import { learn, memoryList, remember } from "./memory.js";
 import { scan } from "./scan.js";
 
 const server = new McpServer({ name: "leveret", version: "0.1.0" });
@@ -122,6 +122,29 @@ server.registerTool(
   }),
 );
 
+server.registerTool(
+  "learn",
+  {
+    description:
+      "Persist a human-taught convention to the repo's review memory: free-text " +
+      "teaching sourced from feedback on a finding (a maintainer reply, an explicit " +
+      "instruction). Conventions are injected into the review/verify prompts, where " +
+      "they both suppress priced classes and RAISE findings that violate them; they " +
+      "are never matched mechanically and never garbage-collected — a human retires " +
+      "one by deleting its line. Always attribute: author is the human whose ruling " +
+      "this is, not the agent relaying it.",
+    inputSchema: {
+      repo: z.string().describe("absolute path to the reviewed repo"),
+      text: z.string().describe("the ruling, in the human's words"),
+      author: z.string().describe("the human who taught it (e.g. GitHub login)"),
+      scope: z.array(z.string()).optional().describe("path globs bounding the ruling"),
+    },
+  },
+  async (args) => ({
+    content: [{ type: "text", text: JSON.stringify(await learn(args), null, 1) }],
+  }),
+);
+
 server.registerPrompt(
   "review",
   {
@@ -130,9 +153,9 @@ server.registerPrompt(
       "cross-file blast radius, run every lens, emit falsifiable concerns as JSON.",
     argsSchema: { repo: z.string(), base: z.string() },
   },
-  ({ repo, base }) => ({
+  async ({ repo, base }) => ({
     messages: [
-      { role: "user", content: { type: "text", text: loadContract("review", { repo, base }) } },
+      { role: "user", content: { type: "text", text: await loadContract("review", { repo, base }) } },
     ],
   }),
 );
@@ -146,9 +169,9 @@ server.registerPrompt(
       "drops via remember, report only what survives.",
     argsSchema: { repo: z.string(), base: z.string() },
   },
-  ({ repo, base }) => ({
+  async ({ repo, base }) => ({
     messages: [
-      { role: "user", content: { type: "text", text: loadContract("verify", { repo, base }) } },
+      { role: "user", content: { type: "text", text: await loadContract("verify", { repo, base }) } },
     ],
   }),
 );

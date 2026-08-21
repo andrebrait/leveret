@@ -248,7 +248,7 @@ treats subscription OAuth as a peer of the API key, never an afterthought.
 
 - [x] **P1** — engine registry (semgrep, gitleaks, shellcheck, ruff, actionlint),
       normalized findings, MCP `scan` + `ast_search`, integration tests
-- [ ] **P2** — `.leveret.yml` profiles: path scopes, severity floors, reasoned
+- [x] **P2** — profiles (landed)
       suppressions, suppression reporting
 - [x] **P3** — memory store, fingerprints + anchors, `remember` + `memory` tools,
       auto-apply in `scan`, promotion candidates

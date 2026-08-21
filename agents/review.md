@@ -27,6 +27,15 @@ be verified and will be dropped.
    traced and what you found.
 5. The work item's stated intent (issue, spec, PR description) when provided.
 
+## Repo rulings (accumulated case law — apply them)
+
+{{RULINGS}}
+
+Rulings work in both directions: a taught convention SUPPRESSES concerns it prices
+("we do X here, don't flag it") and RAISES concerns when the diff violates it.
+Generalize sensibly — a ruling about one file's pattern applies to the same pattern
+elsewhere — but never stretch a ruling past its stated scope.
+
 ## Lenses — run every one
 
 - **Correctness and hostile inputs.** Logic errors, unchecked error paths, races,

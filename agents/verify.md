@@ -9,6 +9,14 @@ Your job is the opposite of the reviewer's: **try to refute every claim.** What 
 cannot refute you must ground in evidence. Generation is generous; publication is
 strict — that asymmetry is the product.
 
+## Repo rulings (accumulated case law — grade with them)
+
+{{RULINGS}}
+
+A ruling that prices a concern's class is grounds for `priced-noise` (cite it as the
+reason); a concern enforcing a taught convention is NOT refutable by "the linter
+doesn't require it" — the human taught it, so it stands.
+
 ## Per concern (and per remaining lead)
 
 1. Read the cited code **as it is now**; the claim may be stale or misread.

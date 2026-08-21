@@ -10,9 +10,17 @@ import type { Finding } from "./findings.js";
 export type MemoryGrade = "priced-noise" | "false-positive";
 
 export interface MemoryEntry {
-  fp: string; // engine/RULE/path-or-glob
-  grade: MemoryGrade;
-  reason: string;
+  /** absent = fingerprint entry (mechanical suppression); "convention" = human-taught
+   * teaching text, injected into the agent prompts, never matched mechanically */
+  kind?: "convention";
+  /** fingerprint entries: engine/RULE/path-or-glob */
+  fp?: string;
+  grade?: MemoryGrade;
+  reason?: string;
+  /** convention entries: the ruling itself, in the human's words */
+  text?: string;
+  /** convention entries: optional path globs bounding where the ruling applies */
+  scope?: string[];
   /** sha256 of the trimmed anchored source line; entry applies only while a
    * matching finding's own line still hashes to this. Absent = class-wide. */
   anchor?: string;
@@ -75,7 +83,7 @@ export async function memoryList(opts: { repo: string }): Promise<MemoryEntry[]>
       // realistic corruption; fail loud but diagnosable, never a bare SyntaxError.
       throw new Error(`${memPath(opts.repo)}:${i + 1}: malformed memory entry (${String(err).slice(0, 80)})`);
     }
-    if (applied[e.fp]) e.lastApplied = applied[e.fp];
+    if (e.fp && applied[e.fp]) e.lastApplied = applied[e.fp];
     entries.push(e);
   }
   return entries;
@@ -126,6 +134,48 @@ export async function remember(opts: {
   return entry;
 }
 
+/** Persist a human-taught convention: fingerprint-free teaching text sourced from
+ * feedback (a reply on a finding, an explicit instruction). Injected into the agent
+ * prompts, where it can both suppress and RAISE findings; never applied
+ * mechanically, never GC'd — a human retires it by deleting the line. */
+export async function learn(opts: {
+  repo: string;
+  text: string;
+  author: string;
+  scope?: string[];
+}): Promise<MemoryEntry> {
+  if (!opts.text) throw new Error("a convention needs text");
+  if (!opts.author) throw new Error("a convention needs an author — anonymous teaching is unauditable");
+  const entry: MemoryEntry = {
+    kind: "convention",
+    text: opts.text,
+    ...(opts.scope?.length ? { scope: opts.scope } : {}),
+    author: opts.author,
+    created: new Date().toISOString().slice(0, 10),
+  };
+  await ensureStore(opts.repo);
+  await appendFile(memPath(opts.repo), `${JSON.stringify(entry)}\n`);
+  return entry;
+}
+
+/** The rulings block injected into served agent contracts: conventions verbatim
+ * plus fingerprint reasons — the repo's accumulated case law, LLM-generalizable. */
+export async function rulingsText(repo: string): Promise<string> {
+  const entries = await memoryList({ repo });
+  if (entries.length === 0) return "No recorded rulings for this repository yet.";
+  const lines: string[] = [];
+  for (const e of entries) {
+    if (e.kind === "convention") {
+      lines.push(
+        `- ${e.text}${e.scope ? ` [scope: ${e.scope.join(", ")}]` : ""} (taught by ${e.author ?? "unknown"}) [${e.created}]`,
+      );
+    } else if (e.fp) {
+      lines.push(`- [${e.grade}] ${e.fp}: ${e.reason} (${e.author ?? "verifier"}, ${e.created})`);
+    }
+  }
+  return lines.join("\n");
+}
+
 function fpMatches(fp: string, f: Finding): boolean {
   const [engine, rule, ...rest] = fp.split("/");
   const glob = rest.join("/");
@@ -149,6 +199,8 @@ export async function applyMemory(
   for (const f of findings) {
     let dropped = false;
     for (const e of entries) {
+      // conventions are for the agents, not mechanical layer-2 suppression
+      if (e.kind === "convention" || !e.fp) continue;
       if (!fpMatches(e.fp, f)) continue;
       if (e.anchor) {
         const text = await lineAt(repo, f.file, f.line);
@@ -156,7 +208,7 @@ export async function applyMemory(
         // exists — the memory is dead for this finding, fall through to layer 3.
         if (text === null || hashLine(text) !== e.anchor) continue;
       }
-      const t = tally.get(e.fp) ?? { rule: e.fp, count: 0, reason: e.reason };
+      const t = tally.get(e.fp) ?? { rule: e.fp, count: 0, reason: e.reason ?? "" };
       t.count += 1;
       tally.set(e.fp, t);
       applied.add(e);
@@ -168,7 +220,7 @@ export async function applyMemory(
   if (applied.size > 0) {
     const today = new Date().toISOString().slice(0, 10);
     const stamps = await readApplied(repo);
-    for (const e of applied) stamps[e.fp] = today;
+    for (const e of applied) if (e.fp) stamps[e.fp] = today;
     await ensureStore(repo);
     // tmp + rename: a crash mid-write must not leave a torn file that the next
     // reader silently resets to {} (ponytail: still last-writer-wins between

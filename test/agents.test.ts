@@ -14,18 +14,18 @@ const serverSource = readFileSync(join(root, "src/server.ts"), "utf8");
 const registered = [...serverSource.matchAll(/registerTool\(\s*"([^"]+)"/g)].map((m) => m[1]);
 
 describe("agent contracts", () => {
-  it("both contracts exist and load with placeholders substituted", () => {
+  it("both contracts exist and load with placeholders substituted", async () => {
     for (const name of ["review", "verify"] as const) {
-      const text = loadContract(name, { repo: "/tmp/x", base: "origin/main" });
+      const text = await loadContract(name, { repo: "/tmp/x", base: "origin/main" });
       expect(text).toContain("/tmp/x");
       expect(text).toContain("origin/main");
       expect(text).not.toMatch(/\{\{[A-Z_]+\}\}/); // no unsubstituted placeholders
     }
   });
 
-  it("every MCP tool a contract instructs the agent to call actually exists", () => {
+  it("every MCP tool a contract instructs the agent to call actually exists", async () => {
     for (const name of ["review", "verify"] as const) {
-      const text = loadContract(name, { repo: "r", base: "b" });
+      const text = await loadContract(name, { repo: "r", base: "b" });
       const tools = [...text.matchAll(/`leveret\.([a-z_]+)`/g)].map((m) => m[1]);
       // zero matches would make this loop assert nothing — the guard must fail
       // loudly if a rewrite de-backticks the tool references (R19)
@@ -36,8 +36,8 @@ describe("agent contracts", () => {
     }
   });
 
-  it("the review contract mandates the non-negotiables", () => {
-    const text = loadContract("review", { repo: "r", base: "b" });
+  it("the review contract mandates the non-negotiables", async () => {
+    const text = await loadContract("review", { repo: "r", base: "b" });
     // cross-file blast radius is the class a diff-only reviewer misses
     expect(text.toLowerCase()).toContain("outside the diff");
     expect(text).toContain("`leveret.scan`");
@@ -45,8 +45,8 @@ describe("agent contracts", () => {
     expect(text).toContain("read-only");
   });
 
-  it("the verify contract mandates refute-or-evidence and the three grades", () => {
-    const text = loadContract("verify", { repo: "r", base: "b" });
+  it("the verify contract mandates refute-or-evidence and the three grades", async () => {
+    const text = await loadContract("verify", { repo: "r", base: "b" });
     for (const grade of ["actionable", "priced-noise", "false-positive"]) {
       expect(text).toContain(grade);
     }
@@ -54,12 +54,12 @@ describe("agent contracts", () => {
     expect(text.toLowerCase()).toContain("refute");
   });
 
-  it("CONTRACTS enumerates exactly the shipped contracts", () => {
+  it("CONTRACTS enumerates exactly the shipped contracts", async () => {
     expect(Object.keys(CONTRACTS).sort()).toEqual(["review", "verify"]);
   });
 
-  it("the review contract mandates a coverage report beside the concerns", () => {
-    const text = loadContract("review", { repo: "r", base: "b" });
+  it("the review contract mandates a coverage report beside the concerns", async () => {
+    const text = await loadContract("review", { repo: "r", base: "b" });
     expect(text).toContain('"coverage"');
     expect(text).toContain('"concerns"');
     // per-file verdict for EVERY changed file — coverage without per-file honesty is theater
@@ -67,9 +67,9 @@ describe("agent contracts", () => {
     expect(text).toMatch(/considered-fine|not-examined/);
   });
 
-  it("out-of-diff findings are a first-class category carrying their correlation", () => {
-    const review = loadContract("review", { repo: "r", base: "b" });
-    const verify = loadContract("verify", { repo: "r", base: "b" });
+  it("out-of-diff findings are a first-class category carrying their correlation", async () => {
+    const review = await loadContract("review", { repo: "r", base: "b" });
+    const verify = await loadContract("verify", { repo: "r", base: "b" });
     // review concerns and verified reports both mark scope...
     expect(review).toContain('"scope"');
     expect(verify).toContain('"scope"');
@@ -80,8 +80,8 @@ describe("agent contracts", () => {
     expect(verify).not.toMatch(/outside the diff[^.]*\bskip\b/i);
   });
 
-  it("the verify contract reports findings in importance tiers and carries coverage through", () => {
-    const text = loadContract("verify", { repo: "r", base: "b" });
+  it("the verify contract reports findings in importance tiers and carries coverage through", async () => {
+    const text = await loadContract("verify", { repo: "r", base: "b" });
     for (const tier of ["critical", "major", "minor", "nit"]) {
       expect(text).toContain(`"${tier}"`);
     }
