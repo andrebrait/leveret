@@ -149,7 +149,10 @@ FOSS self-hostable reviewer: `on: pull_request` replaces the webhook (GitHub
 delivers events to its own runners), a workflow file is the whole install, and a
 self-hosted runner keeps model credentials at home with no inbound port (it polls
 outbound). The webhook App server remains the always-on option for hosts that want
-App identity and instant reviews. Both are thin entries over the same
+App identity and instant reviews — and reachability is part of that offering, not
+the user's puzzle: the docs first-class relay/tunnel setups (smee.io for testing,
+cloudflared or similar for production) so webhook mode works from a NAT'd box with
+no exposed port. Both are thin entries over the same
 scan/runner/renderer internals. Known shared wart: fork PRs get a read-only token —
 punted for MVP.
 

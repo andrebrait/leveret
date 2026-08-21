@@ -9,7 +9,12 @@ model side stays BYOAI through the runner hook below.
 ## Create the App (one-click manifest flow)
 
 1. GitHub → Settings → Developer settings → GitHub Apps → New GitHub App.
-2. Webhook URL: `https://<your-host>:8090/` (any path). Set a webhook secret.
+2. Webhook URL: wherever GitHub can reach you — a NAT'd box needs no exposed port:
+   - testing: a [smee.io](https://smee.io) channel, relayed locally with
+     `npx smee -u <channel> -t http://127.0.0.1:8090/`;
+   - production: a tunnel (e.g. `cloudflared tunnel --url http://127.0.0.1:8090`)
+     whose public URL goes in this field.
+   Set a webhook secret either way.
 3. Permissions: **Pull requests: Read & write**, **Contents: Read**.
    Subscribe to events: **Pull request**, **Pull request review comment**.
 4. Generate a private key; note the App ID. Install the App on your repos.
