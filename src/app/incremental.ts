@@ -30,14 +30,19 @@ interface ThreadsResponse {
   };
 }
 
-/** The bot's own UNRESOLVED threads: those are the findings a new push answers. */
+/** The bot's own UNRESOLVED threads: those are the findings a new push answers.
+ * GraphQL spells a Bot login without the [bot] suffix REST uses — this exact
+ * mismatch silently emptied the prior list on the first live incremental run,
+ * so both sides are normalized before comparing. */
+const bare = (login: string) => login.replace(/\[bot\]$/, "");
+
 export function parsePriorThreads(res: ThreadsResponse, botLogin: string): PriorFinding[] {
   const nodes = res.data?.repository?.pullRequest?.reviewThreads?.nodes ?? [];
   const out: PriorFinding[] = [];
   for (const t of nodes) {
     if (t.isResolved) continue;
     const first = t.comments?.nodes?.[0];
-    if (first?.author?.login !== botLogin) continue;
+    if (!first || bare(first.author?.login ?? "") !== bare(botLogin)) continue;
     out.push({
       threadId: t.id,
       path: t.path ?? "",
