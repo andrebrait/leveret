@@ -93,3 +93,47 @@ describe("parseDuration", () => {
     expect(parseDuration("bogus")).toBeNull();
   });
 });
+
+describe("spawnCapture (the phase executor)", () => {
+  it("ignores stdin so EOF-waiting CLIs finish instead of wedging", async () => {
+    const { spawnCapture } = await import("../src/runner/omp.js");
+    // cat hangs forever on an open stdin pipe; with stdin ignored it exits at once
+    const t0 = Date.now();
+    const r = await spawnCapture("cat", [], "/tmp", 5000);
+    expect(r.code).toBe(0);
+    expect(Date.now() - t0).toBeLessThan(3000);
+  });
+
+  it("kills at the deadline and marks the result timed out", async () => {
+    const { spawnCapture } = await import("../src/runner/omp.js");
+    const r = await spawnCapture("sleep", ["30"], "/tmp", 300);
+    expect(r.timedOut).toBe(true);
+    expect(r.code).not.toBe(0);
+  });
+});
+
+describe("phase retry on crash", () => {
+  it("a crashing command is retried once; a second crash surfaces", async () => {
+    const { runPhaseCommand } = await import("../src/runner/omp.js");
+    const { mkdtempSync, writeFileSync, chmodSync } = await import("node:fs");
+    const { tmpdir } = await import("node:os");
+    const { join } = await import("node:path");
+    const d = mkdtempSync(join(tmpdir(), "lev-retry-"));
+    // crashes on first run, succeeds on second (state via marker file)
+    writeFileSync(join(d, "fickle.sh"), '#!/bin/sh\nif [ -f flag ]; then echo \'{"ok":true}\'; else touch flag; echo boom >&2; exit 1; fi\n');
+    chmodSync(join(d, "fickle.sh"), 0o755);
+    const r = await runPhaseCommand("./fickle.sh", [], d, 5000);
+    expect(r.stdout).toContain('"ok":true');
+    // always-crashing command: two attempts then loud failure
+    writeFileSync(join(d, "dead.sh"), "#!/bin/sh\nexit 7\n");
+    chmodSync(join(d, "dead.sh"), 0o755);
+    await expect(runPhaseCommand("./dead.sh", [], d, 5000)).rejects.toThrow(/rc=7/);
+  });
+
+  it("a deadline kill is NOT retried", async () => {
+    const { runPhaseCommand } = await import("../src/runner/omp.js");
+    const t0 = Date.now();
+    await expect(runPhaseCommand("sleep", ["30"], "/tmp", 400)).rejects.toThrow(/deadline/);
+    expect(Date.now() - t0).toBeLessThan(5000); // one attempt, not two
+  });
+});
