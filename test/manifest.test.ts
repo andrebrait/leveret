@@ -3,8 +3,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
+  brandName,
   buildManifest,
   loadCredentials,
+  renderCallbackPage,
   renderSetupPage,
   saveCredentials,
 } from "../src/app/manifest.js";
@@ -23,6 +25,19 @@ describe("buildManifest", () => {
     expect(m.default_events).toEqual(["pull_request", "pull_request_review_comment"]);
     expect(m.public).toBe(false);
     expect(m.name).toMatch(/leveret/i);
+    expect(m.description).toMatch(/leveret/i);
+  });
+});
+
+describe("brandName", () => {
+  it("keeps Leveret in front so the bot login stays branded, within GitHub's 34-char cap", () => {
+    // "Leveret acme" lowercases and spaces-to-dashes into leveret-acme[bot]
+    expect(brandName("acme")).toBe("Leveret acme");
+    expect(brandName()).toBe("Leveret");
+    expect(brandName("  spaced  ")).toBe("Leveret spaced");
+    const long = brandName("a".repeat(60));
+    expect(long.length).toBeLessThanOrEqual(34);
+    expect(long.startsWith("Leveret ")).toBe(true);
   });
 });
 
@@ -33,6 +48,27 @@ describe("renderSetupPage", () => {
     expect(html).toContain("name=\"manifest\"");
     // the manifest travels inside the form
     expect(html).toContain("leveret.example");
+  });
+
+  it("carries the brand: logo, an owner field that names the App, and the org prefill", () => {
+    const html = renderSetupPage("https://leveret.example:8090", "http://127.0.0.1:8090", "st", "acme");
+    expect(html).toContain("/assets/logo.svg");
+    expect(html).toContain('name="owner"');
+    expect(html).toContain('value="acme"');
+    // pre-named for the org, not the bare name every other install also wants
+    expect(html).toContain("Leveret acme");
+    expect(html).toContain("https://github.com/organizations/acme/settings/apps/new?state=st");
+  });
+});
+
+describe("renderCallbackPage", () => {
+  it("sends the user to upload the avatar — the one brand surface a manifest cannot set", () => {
+    const personal = renderCallbackPage("https://github.com/apps/leveret-acme");
+    expect(personal).toContain("/assets/logo.png");
+    expect(personal).toContain("https://github.com/settings/apps/leveret-acme");
+    expect(personal).toContain("https://github.com/apps/leveret-acme/installations/new");
+    const org = renderCallbackPage("https://github.com/apps/leveret-acme", "acme");
+    expect(org).toContain("https://github.com/organizations/acme/settings/apps/leveret-acme");
   });
 });
 

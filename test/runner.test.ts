@@ -137,3 +137,21 @@ describe("phase retry on crash", () => {
     expect(Date.now() - t0).toBeLessThan(5000); // one attempt, not two
   });
 });
+
+describe("verify-output schema enforcement", () => {
+  it("names every missing required section, including resolutions when prior findings were supplied", async () => {
+    const { verifySchemaGaps } = await import("../src/runner/omp.js");
+    const bare = { report: [] };
+    expect(verifySchemaGaps(bare, false)).toEqual(["verdicts", "coverage"]);
+    const full = {
+      report: [],
+      verdicts: [],
+      coverage: { lenses: [{ lens: "x", outcome: "clean" }], files: [{ file: "a", verdict: "considered-fine" }] },
+    };
+    expect(verifySchemaGaps(full, false)).toEqual([]);
+    // prior findings supplied -> resolutions become required
+    expect(verifySchemaGaps(full, true)).toEqual(["resolutions"]);
+    // empty coverage arrays count as missing: an empty table is silent shrinkage
+    expect(verifySchemaGaps({ report: [], verdicts: [], coverage: { lenses: [], files: [] } }, false)).toEqual(["coverage"]);
+  });
+});

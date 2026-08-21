@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { randomBytes, randomUUID } from "node:crypto";
 import { execFile } from "node:child_process";
-import { appendFile, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { appendFile, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
@@ -15,6 +15,7 @@ import { parsePriorThreads, resolvedReply, type PriorFinding } from "./increment
 import {
   convertManifestCode,
   loadCredentials,
+  renderCallbackPage,
   renderSetupPage,
   saveCredentials,
   type AppCredentials,
@@ -137,6 +138,9 @@ async function reviewJob(job: Extract<Job, { kind: "review" }>, creds: AppCreden
         },
       });
       verify = JSON.parse(r.stdout) as VerifyOutput;
+      // raw output persisted per run: schema forensics beat guessing
+      await mkdir(join(DATA_DIR, "runs"), { recursive: true });
+      await writeFile(join(DATA_DIR, "runs", `${runId}.json`), r.stdout).catch(() => {});
     } else {
       verify = reportFromScan(result);
     }
@@ -208,6 +212,13 @@ function redirectBase(req: IncomingMessage, port: number): string {
   return `http://${req.headers.host ?? `127.0.0.1:${port}`}`;
 }
 
+/** The brand assets, served so the setup pages have a logo and the user has an
+ * avatar file to upload. Whitelisted by name: this server sits on a public tunnel. */
+const ASSETS: Record<string, string> = {
+  "/assets/logo.svg": "image/svg+xml",
+  "/assets/logo.png": "image/png",
+};
+
 function html(res: ServerResponse, code: number, body: string): void {
   res.writeHead(code, { "content-type": "text/html; charset=utf-8" }).end(body);
 }
@@ -215,10 +226,19 @@ function html(res: ServerResponse, code: number, body: string): void {
 export async function main(): Promise<void> {
   let creds = await loadCredentials(DATA_DIR, process.env);
   const port = Number(process.env.PORT ?? 8090);
-  const setupStates = new Set<string>();
+  // state token -> the org the setup page was opened for (undefined = personal
+  // account); the callback needs it to link at the right App settings page
+  const setupStates = new Map<string, string | undefined>();
 
   const server = createServer((req, res) => {
     const url = new URL(req.url ?? "/", "http://x");
+
+    if (req.method === "GET" && ASSETS[url.pathname]) {
+      readFile(new URL(`../..${url.pathname}`, import.meta.url))
+        .then((buf) => res.writeHead(200, { "content-type": ASSETS[url.pathname]! }).end(buf))
+        .catch(() => res.writeHead(404).end());
+      return;
+    }
 
     if (req.method === "GET" && url.pathname === "/setup") {
       if (creds) {
@@ -226,27 +246,26 @@ export async function main(): Promise<void> {
         return;
       }
       const state = randomBytes(16).toString("hex");
-      setupStates.add(state);
-      html(res, 200, renderSetupPage(hookUrl(req, port), redirectBase(req, port), state, url.searchParams.get("org") ?? undefined));
+      const org = url.searchParams.get("org") ?? undefined;
+      setupStates.set(state, org);
+      html(res, 200, renderSetupPage(hookUrl(req, port), redirectBase(req, port), state, org));
       return;
     }
 
     if (req.method === "GET" && url.pathname === "/setup/callback") {
       const code = url.searchParams.get("code");
       const state = url.searchParams.get("state");
-      if (!code || !state || !setupStates.delete(state)) {
+      if (!code || !state || !setupStates.has(state)) {
         html(res, 400, "<p>Invalid or expired setup state; start again at /setup.</p>");
         return;
       }
+      const org = setupStates.get(state);
+      setupStates.delete(state);
       convertManifestCode(code)
         .then(async (c) => {
           await saveCredentials(DATA_DIR, c);
           creds = await loadCredentials(DATA_DIR, process.env);
-          html(
-            res,
-            200,
-            `<p>Done — the App is yours. <a href="${c.htmlUrl}/installations/new">Install it on your repositories</a> and open a pull request.</p>`,
-          );
+          html(res, 200, renderCallbackPage(c.htmlUrl, org));
         })
         .catch((err) => html(res, 500, `<p>Setup failed: ${String(err)}</p>`));
       return;

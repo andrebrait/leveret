@@ -170,6 +170,22 @@ export function parseDuration(v: string): number | null {
   return m[2] === "h" ? n * 3_600_000 : m[2] === "m" ? n * 60_000 : n * 1000;
 }
 
+/** The deterministic layer enforcing the contract on the LLM: name what a verify
+ * output is missing so the phase can be retried once with a corrective note. An
+ * empty coverage table counts as missing — silent shrinkage must not pass. */
+export function verifySchemaGaps(out: unknown, priorSupplied: boolean): string[] {
+  const d = (out ?? {}) as Record<string, unknown>;
+  const gaps: string[] = [];
+  if (!Array.isArray(d.report)) gaps.push("report");
+  if (!Array.isArray(d.verdicts)) gaps.push("verdicts");
+  const cov = d.coverage as { lenses?: unknown[]; files?: unknown[] } | undefined;
+  if (!cov || !Array.isArray(cov.lenses) || !Array.isArray(cov.files) || (cov.lenses.length === 0 && cov.files.length === 0)) {
+    gaps.push("coverage");
+  }
+  if (priorSupplied && !Array.isArray(d.resolutions)) gaps.push("resolutions");
+  return gaps;
+}
+
 export interface McpConfig {
   mcpServers: Record<string, { command: string; args: string[] }>;
 }
@@ -268,7 +284,23 @@ export async function main(): Promise<void> {
     leads,
     ...(prior ? ["\n## The bot's previously posted findings on this PR (judge each; emit resolutions)\n", prior] : []),
   ].join("\n");
-  const verify = await phase(repo, verifyPrompt, args, overlayPath);
+  let verify = await phase(repo, verifyPrompt, args, overlayPath);
+  {
+    const gaps = verifySchemaGaps(verify.json, Boolean(prior));
+    if (gaps.length > 0) {
+      // one corrective retry: quote the contract back at the model
+      const corrective = [
+        verifyPrompt,
+        "",
+        "## Schema correction (your previous output was incomplete)",
+        `Your last answer was missing or left empty: ${gaps.join(", ")}.`,
+        "Re-emit the FULL output object per the contract: report, verdicts, a",
+        "non-empty coverage block (every lens with its outcome, every changed file",
+        "with a verdict), and resolutions for every previously posted finding.",
+      ].join("\n");
+      verify = await phase(repo, corrective, args, overlayPath);
+    }
+  }
 
   const out = verify.json as Record<string, unknown>;
   // run-configuration line data for the walkthrough: standardization is auditable
