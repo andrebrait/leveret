@@ -45,3 +45,28 @@ export async function postReview(
     await octokit.rest.pulls.createReview(base);
   }
 }
+
+export async function postComment(
+  app: App,
+  installationId: number,
+  repo: string,
+  issue: number,
+  body: string,
+): Promise<number> {
+  const octokit = await app.getInstallationOctokit(installationId);
+  const [owner, name] = repo.split("/") as [string, string];
+  const r = await octokit.rest.issues.createComment({ owner, repo: name, issue_number: issue, body });
+  return r.data.id;
+}
+
+export async function updateComment(
+  app: App,
+  installationId: number,
+  repo: string,
+  commentId: number,
+  body: string,
+): Promise<void> {
+  const octokit = await app.getInstallationOctokit(installationId);
+  const [owner, name] = repo.split("/") as [string, string];
+  await octokit.rest.issues.updateComment({ owner, repo: name, comment_id: commentId, body });
+}
