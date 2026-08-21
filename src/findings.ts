@@ -41,4 +41,8 @@ export interface ScanResult {
   /** engines that failed or were missing during the delta BASE pass: their head
    * findings keep provenance "introduced" but that classification is unverified */
   baseErrors: EngineReport[];
+  /** pre-existing findings ADJACENT to the changed lines: dropped from findings,
+   * but the change touches their neighbourhood, so the reviewer is reminded —
+   * unless the profile sets `reminders: false` or a suppression prices them */
+  reminders: Finding[];
 }
