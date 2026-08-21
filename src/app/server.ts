@@ -290,8 +290,8 @@ export async function main(): Promise<void> {
   server.listen(port, () =>
     console.log(
       creds
-        ? `leveret app listening on :${port}`
-        : `leveret app UNCONFIGURED — open http://127.0.0.1:${port}/setup to create your GitHub App`,
+        ? `Leveret listening on :${port}`
+        : `Leveret UNCONFIGURED — open http://127.0.0.1:${port}/setup to create your GitHub App`,
     ),
   );
 }

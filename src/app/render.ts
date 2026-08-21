@@ -41,7 +41,7 @@ export function renderWalkthrough(
 ): string {
   const all = [...v.report].sort(byTier);
   const outOfDiff = all.filter((r) => r.scope === "out-of-diff");
-  const s: string[] = ["## leveret review", ""];
+  const s: string[] = ["## Leveret review", ""];
 
   if (all.length === 0) {
     s.push("No actionable findings.", "");
