@@ -214,7 +214,16 @@ subscription support is what keeps BYOAI intact at the provider level: the user
 picks provider + model, leveret picks everything else. Every published walkthrough
 records harness + version + model (the run-configuration line), so standardization
 is auditable. `LEVERET_RUNNER` stays as the escape hatch for bring-your-own-harness
-users — their reviews are labeled as such. The MCP + skill path (running reviews
+users — their reviews are labeled as such.
+
+Recorded for later (owner, 2026-08-21): `pi` — the harness omp.sh builds on — may be
+the purer long-term environment if it covers (or can cheaply gain) the vendors and
+subscription plans omp ships with. Both allow overriding the system prompt, which
+serves the ultimate goal: a leveret-authored reviewer system prompt (plenty of
+harnesses publish theirs to learn from). Sequence: `leveret-runner-omp` is the MVP;
+the first trial runs WITHOUT touching the system prompt; extras related to LSP and
+AST navigation, and any output compaction/capturing, are turned off in either
+harness. Evaluate pi + custom system prompt after the MVP proves the seam. The MCP + skill path (running reviews
 inside the user's own client, their harness by design) is deliberately NOT
 standardized: a human is present there to judge; consistency matters where reviews
 are autonomous and comparable.
