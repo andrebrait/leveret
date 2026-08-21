@@ -93,7 +93,7 @@ flowchart TD
     classDef store fill:#9fd8e3,stroke:#4d9aab,color:#111
 ```
 
-The pieces, left to right:
+The pieces, top to bottom:
 
 - **Webhook receiver.** GitHub sends every PR event to your public URL; the tunnel
   forwards it to the local server, which verifies the HMAC signature (the webhook
