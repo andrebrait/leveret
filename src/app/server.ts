@@ -94,11 +94,11 @@ async function reviewJob(job: Extract<Job, { kind: "review" }>): Promise<void> {
         job.repo,
         job.pr,
         job.headSha,
-        renderWalkthrough(verify, result),
+        renderWalkthrough(verify, result, graph),
         renderInline(verify),
       );
     } else {
-      console.log(renderWalkthrough(verify, result));
+      console.log(renderWalkthrough(verify, result, graph));
     }
   } finally {
     await rm(work, { recursive: true, force: true }).catch(() => {});

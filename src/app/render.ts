@@ -1,4 +1,5 @@
 import type { Finding, ScanResult } from "../findings.js";
+import type { GraphStatus } from "./graph.js";
 
 // Rendering the verify output + scan result into the published review: tier-grouped
 // inline comments and the what-was-checked walkthrough. Pure functions — the App's
@@ -31,7 +32,11 @@ export interface VerifyOutput {
 const TIER_ORDER: Record<Tier, number> = { critical: 0, major: 1, minor: 2, nit: 3 };
 const byTier = (a: ReportItem, b: ReportItem) => TIER_ORDER[a.tier] - TIER_ORDER[b.tier];
 
-export function renderWalkthrough(v: VerifyOutput, scan: ScanResult): string {
+export function renderWalkthrough(
+  v: VerifyOutput,
+  scan: ScanResult,
+  graph?: GraphStatus,
+): string {
   const all = [...v.report].sort(byTier);
   const outOfDiff = all.filter((r) => r.scope === "out-of-diff");
   const s: string[] = ["## leveret review", ""];
@@ -80,6 +85,17 @@ export function renderWalkthrough(v: VerifyOutput, scan: ScanResult): string {
     s.push(`| \`${f.file}\` | ${f.verdict}${f.note ? ` — ${f.note}` : ""} |`);
   }
 
+  if (graph) {
+    // The graph is leveret's own capability, generated per-checkout at the exact
+    // reviewed commit — its absence is a reviewer deficiency worth reporting, never
+    // a property of the reviewed repo.
+    s.push(
+      "",
+      graph.ok
+        ? "Code graph: live (structural blast radius queried, not greped)."
+        : `Code graph: unavailable — ${graph.detail ?? "unknown"}; blast radius fell back to ast_search/grep.`,
+    );
+  }
   s.push("", "### Engines", "", "| engine | status | found | kept |", "| --- | --- | --- | --- |");
   for (const e of scan.engines) {
     s.push(`| ${e.engine} | ${e.status} | ${e.found ?? "—"} | ${e.kept ?? "—"} |`);

@@ -15,6 +15,16 @@ model side stays BYOAI through the runner hook below.
 4. Generate a private key; note the App ID. Install the App on your repos.
 5. Upload [`assets/logo.png`](../assets/logo.png) as the App logo.
 
+## Reviewer toolbelt (leveret's dependencies, not the reviewed repo's)
+
+The engines and the code graph are capabilities of the REVIEWER: leveret generates
+the graph into every checkout at exactly the reviewed commit, regardless of what
+the target repository ships. Install beside the server: `codegraph`, plus the
+engines you want live (`semgrep`, `gitleaks`, `shellcheck`, `ruff`, `actionlint`,
+`zizmor`, `osv-scanner`, `typos`, `jscpd`, `ast-grep`). A missing tool degrades
+loudly — the walkthrough reports which surfaces were live — but a review host
+should carry the full belt.
+
 ## Run the server
 
 ```sh
