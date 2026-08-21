@@ -16,21 +16,31 @@ export interface Manifest {
   default_events: string[];
 }
 
-export function buildManifest(publicUrl: string, name = "Leveret"): Manifest {
-  const base = publicUrl.replace(/\/+$/, "");
+export function buildManifest(hookUrl: string, redirectBase: string, name = "Leveret"): Manifest {
+  // hookUrl is where GitHub DELIVERS WEBHOOKS (tunnel or smee channel);
+  // redirectBase is where the USER'S BROWSER returns after creation — the browser
+  // sits next to the server, so this stays local. smee relays webhook POSTs only:
+  // using it for the redirect would strand the browser on smee's page.
+  const hook = hookUrl.replace(/\/+$/, "");
+  const redirect = redirectBase.replace(/\/+$/, "");
   return {
     name,
     url: "https://github.com/andrebrait/leveret",
-    hook_attributes: { url: `${base}/` },
-    redirect_url: `${base}/setup/callback`,
+    hook_attributes: { url: `${hook}/` },
+    redirect_url: `${redirect}/setup/callback`,
     public: false,
     default_permissions: { pull_requests: "write", contents: "read" },
     default_events: ["pull_request", "pull_request_review_comment"],
   };
 }
 
-export function renderSetupPage(publicUrl: string, state: string, org?: string): string {
-  const manifest = JSON.stringify(buildManifest(publicUrl));
+export function renderSetupPage(
+  hookUrl: string,
+  redirectBase: string,
+  state: string,
+  org?: string,
+): string {
+  const manifest = JSON.stringify(buildManifest(hookUrl, redirectBase));
   const action = org
     ? `https://github.com/organizations/${org}/settings/apps/new?state=${state}`
     : `https://github.com/settings/apps/new?state=${state}`;
