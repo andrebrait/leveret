@@ -61,14 +61,10 @@ LEVERET_RUNNER="leveret-runner-omp --model gpt-5.6-sol --effort high"
 
 ```mermaid
 flowchart TD
-    subgraph GitHub["☁️ GitHub"]
-        direction LR
-        PR["📄 Pull request<br>opened / pushed"]:::gh
-        REV["📋 Posted review:<br>tiered comments<br>+ walkthrough"]:::gh
-        REPLY["💬 Human reply<br>on a finding"]:::gh
-    end
-
+    PR["📄 Pull request opened / pushed"]:::gh
     T["🚇 Tunnel — funnel / smee / cloudflared"]:::tun
+    REPLY["💬 Human reply on a finding"]:::gh
+    REV["📋 Posted review: tiered comments + walkthrough"]:::gh
 
     subgraph your["🏠 Your machine — leveret-app server"]
         direction LR
@@ -88,13 +84,14 @@ flowchart TD
             RUN --> RA --> VA
         end
         FEED[("🧠 learn-feed.jsonl")]:::store
+        SCAN --> RUN
+        WH --> FEED
     end
 
-    PR --> T --> WH
-    SCAN --> RUN
-    VA --> REV
+    PR --> T
     REPLY --> T
-    WH --> FEED
+    T --> WH
+    VA --> REV
     classDef gh fill:#6ea8fe,stroke:#3d6fd9,color:#111
     classDef tun fill:#ffc86b,stroke:#cc8f22,color:#111
     classDef core fill:#7ed6a2,stroke:#3d9e6a,color:#111
