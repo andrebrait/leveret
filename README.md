@@ -7,66 +7,103 @@
 A leveret is a young hare — small, fast, and born with its eyes open.
 
 Leveret is a self-hosted, hybrid engine for private code reviews: the successor to
-hosted AI review bots for teams whose code stays home. Deterministic static analysis,
-AST-level search, and a graded filtering pipeline exposed over MCP, driven by the AI
-you bring (BYOAI: your provider and model — Anthropic or OpenAI by API key or
-subscription, or a local OpenAI-compatible endpoint — through an MCP-capable client
-like Claude Code interactively, or the GitHub App's standardized runner
-autonomously). The engine layer itself never calls an LLM.
+hosted AI review bots for teams whose code stays home. It combines a deterministic
+static-analysis layer, a code graph built into every checkout, a graded noise filter
+with durable memory, and adversarial agent contracts — driven by the AI you bring
+(BYOAI: your provider and model — Anthropic or OpenAI by API key or subscription, or
+a local OpenAI-compatible endpoint). The engine layer itself never calls an LLM, and
+nothing leaves your infrastructure.
 
-Pipeline the project targets:
+## How a review works
 
 ```
-[diff] → [deterministic first pass: leveret scan] → [review agent: leads → concerns]
-       → [verification agent: refute-or-evidence filter] → [report]
+[PR diff] → scan: engines + delta vs base + profile + memory   (deterministic leads)
+          → review agent: five lenses, cross-file blast radius (falsifiable concerns)
+          → verification agent: refute-or-evidence, 3 grades   (only survivors publish)
+          → tiered findings + walkthrough report
 ```
 
-## Tools
+1. **Deterministic first pass.** Engines run only against what the change touches:
+   semgrep (registry security + per-language rulesets, offline-capable), gitleaks
+   (secrets over the commit range), shellcheck, ruff, actionlint, zizmor (workflow
+   security), osv-scanner (lockfile CVEs), typos, jscpd (duplication, corpus-gated),
+   custom semgrep/ast-grep rule packs, and any SARIF-emitting command via profile
+   `custom:` entries ([recipes](docs/recipes.md): psalm taint, hadolint, trivy, …).
+   **Delta scanning** is on by default with a base ref: findings already present at
+   the base tree are dropped as pre-existing — counted, never silent — with multiset
+   identity (a *copy* of a known-bad line still surfaces), rename tracking, and
+   surfaced base-pass failures. A code graph is generated into the checkout at the
+   exact reviewed commit, so agents query structure instead of grepping for it.
+2. **Three-grade filter.** Every lead ends as `actionable`, `priced-noise`
+   (true, but the repo has ruled fixing it buys nothing), or `false-positive` —
+   assigned cheapest-first by the repo profile (`.leveret.yml`: path scopes,
+   severity floors, reasoned suppressions), the memory store, and finally the
+   verification agent. Nothing is dropped silently: suppressions come back tallied
+   with their reasons.
+3. **Memory that learns from humans.** `.leveret/memory.jsonl`, versioned in the
+   reviewed repo: fingerprint verdicts (optionally anchored to a source line — the
+   memory dies when the line changes) plus **conventions** — free-text rulings
+   taught by maintainers via `learn`, injected into the agent prompts as repo case
+   law, able both to suppress noise and to *raise* findings that violate them.
+4. **Adversarial contracts.** The review agent runs five lenses (correctness and
+   hostile inputs, contract conformance, test honesty, blast radius, leads triage)
+   and must trace changed symbols to call sites *outside* the diff. The verification
+   agent then tries to refute every concern; claims it can neither refute nor ground
+   in executed evidence are dropped, not published.
+5. **Reporting.** Findings publish in importance tiers (`critical / major / minor /
+   nit`, distinct from engine severity), out-of-diff findings appear with their
+   stated correlation to the change, pre-existing defects adjacent to edited lines
+   return as reminders, and every review carries a walkthrough: per-lens outcomes
+   (clean included), per-file verdicts, the engine table, and a run-configuration
+   line naming the harness, model, and thinking level that produced the review.
 
-- **scan** `{repo, base? | files?, engines?, delta?}` — runs the engines applicable to
-  the change set and returns normalized findings (`engine, rule, severity, file, line,
-  message, provenance`) plus a per-engine status report. With a base ref the scan is
-  **delta by default**: findings already present at the base tree are dropped as
-  pre-existing (counted, never silent) and survivors are tagged `introduced`.
-  Engines: semgrep (registry security + per-language rulesets), gitleaks (secrets over
-  `base..HEAD` commits), shellcheck, ruff, actionlint, zizmor (workflow security),
-  osv-scanner (lockfile CVEs), typos (spelling), jscpd (profile-gated duplication),
-  profile-declared semgrep/ast-grep rule packs, and arbitrary SARIF-emitting commands
-  via `custom:` profile entries ([recipes](docs/recipes.md): psalm taint, hadolint,
-  trivy, ...). Findings are review *leads*, not verdicts.
-- **ast_search** `{repo, pattern, lang, paths?}` — structural pattern matching via
-  ast-grep (metavariables, syntax-aware), for call-site-shaped questions text grep
-  gets wrong.
-- **context** `{repo, files}` — prioritization signal, not findings: per-function
-  cyclomatic complexity (lizard), 12-month churn, last-touched date.
-- **remember / memory / learn** — the review memory: fingerprint verdicts with
-  anchors, hygiene listing, and human-taught conventions that are injected into the
-  served `review`/`verify` prompt contracts as repo rulings.
+## Ways to run it
 
-## Run
+**GitHub App (autonomous).** A self-hosted App layer receives PR webhooks, checks
+out the head, builds the code graph, runs the scan, drives the standardized runner,
+and posts the review — inline comments plus walkthrough. The App holds only a GitHub
+App key and webhook secret; model credentials live exclusively in the runner. Human
+replies on findings feed `learn`. Setup: [docs/app.md](docs/app.md).
+
+**Standardized runner.** `leveret-runner-omp` drives the review/verify contracts
+through a pinned omp.sh harness with fixed purity flags (no skills, extensions,
+rules, sessions, or harness LSP; compaction off). You choose provider, model, and
+effort (`--model` / `--effort` / `--provider` / `--omp-arg`, or the matching
+`LEVERET_RUNNER_*` env vars; defaults `gpt-5.6-sol` at `high`); the effective
+configuration is printed in every walkthrough. A custom `LEVERET_RUNNER` command is
+the escape hatch for bring-your-own-harness setups.
+
+**Interactive (MCP).** Register the server in any MCP-capable client and drive
+reviews yourself — the served `review`/`verify` prompts arrive with your repo's
+accumulated rulings substituted in:
 
 ```sh
 npm install && npm run build
-node dist/server.js          # stdio MCP server
-npm test                     # integration tests (need semgrep, gitleaks, shellcheck, ruff, actionlint, ast-grep on PATH)
+claude mcp add leveret -- node /path/to/leveret/dist/server.js
 ```
 
-Claude Code registration:
+MCP tools: `scan`, `ast_search` (structural search via ast-grep), `context`
+(per-function complexity, churn, recency — prioritization signal, not findings),
+`remember` (persist a graded verdict), `memory` (inspect the store), `learn`
+(persist a human-taught convention); MCP prompts: `review`, `verify`.
+
+## The reviewer toolbelt
+
+The engines and the code graph are capabilities of the reviewer, not the reviewed
+repository: install them beside Leveret. Full belt: `codegraph`, `semgrep`,
+`gitleaks`, `shellcheck`, `ruff`, `actionlint`, `zizmor`, `osv-scanner`, `typos`,
+`jscpd`, `ast-grep`, `lizard`, and optionally `serena` for the LSP surface. A
+missing tool degrades loudly — the walkthrough reports which surfaces were live.
 
 ```sh
-claude mcp add leveret -- node /Users/andre/git/leveret/dist/server.js
+npm test        # integration suite; exercises the real tools
 ```
 
-## GitHub App
+## Design and status
 
-See [docs/app.md](docs/app.md) — self-hosted App layer (webhooks, review posting,
-learn feed; no model keys) with the BYOAI runner hook.
-
-## Status / roadmap
-
-See [DESIGN.md](DESIGN.md) — architecture, the three-grade filter (actionable /
-priced-noise / false-positive), the in-repo memory store, agent prompt contracts,
-and the validation benchmark gating adoption.
+[DESIGN.md](DESIGN.md) holds the architecture and decisions: the three-grade
+filter, memory and learnings, runner standardization, the GitHub App split, and the
+validation benchmark that gates replacing a hosted review bot with Leveret.
 
 ## License
 
