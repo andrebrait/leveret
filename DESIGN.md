@@ -106,6 +106,17 @@ Repo-scope memory lives **in the reviewed repo**, versioned and reviewable —
   become one line, not N.
 - **Hygiene**: `lastApplied` enables garbage collection of memories that stopped
   matching anything; stale pricing is deleted, not hoarded.
+- **Memories vs CodeRabbit learnings (gap analysis, 2026-08-21).** Fingerprint
+  entries are the *suppression half* of learnings only: mechanical, drop-only, and
+  invisible to the review agent. Learnings additionally generalize (free text in the
+  reviewer's prompt matches novel findings) and teach (a learned convention RAISES
+  findings). Closing the gap, in order: (1) inject the `reason` prose of in-scope
+  memories into the review/verify prompts — the reviewer reviews *with* the repo's
+  accumulated rulings, and the LLM supplies fuzzy generalization for free; (2) add a
+  second entry kind, `convention` — fingerprint-free teaching text ("this repo
+  invokes Python only through uv run"), sourced from `learn`, usable both to
+  suppress and to raise; (3) keep fingerprints as the cheap exact tier that runs
+  before any LLM sees anything.
 
 ## MCP surface (target)
 
