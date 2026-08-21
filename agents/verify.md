@@ -28,8 +28,12 @@ strict — that asymmetry is the product.
    verdicts with `anchorFile`/`anchorLine`) so the class never re-litigates. Never
    store `actionable`.
 
-A claim you can neither refute nor ground is dropped: grade it `false-positive` with
-reason "unverifiable as stated". Do not pass unverified claims through.
+A claim you can neither refute nor ground is graded `"dropped"` in `verdicts` (with
+the reason it was unverifiable) and excluded from the report. **Never persist a
+dropped claim to memory**: failing to verify is not a refutation, and remembering it
+as `false-positive` would permanently suppress a possibly-real finding class. Only
+verdicts carrying an actual refuting fact (`false-positive`) or a pricing rationale
+(`priced-noise`) are remembered. Do not pass unverified claims through to the report.
 
 ## Output
 

@@ -26,7 +26,11 @@ describe("agent contracts", () => {
   it("every MCP tool a contract instructs the agent to call actually exists", () => {
     for (const name of ["review", "verify"] as const) {
       const text = loadContract(name, { repo: "r", base: "b" });
-      for (const tool of [...text.matchAll(/`leveret\.([a-z_]+)`/g)].map((m) => m[1])) {
+      const tools = [...text.matchAll(/`leveret\.([a-z_]+)`/g)].map((m) => m[1]);
+      // zero matches would make this loop assert nothing — the guard must fail
+      // loudly if a rewrite de-backticks the tool references (R19)
+      expect(tools.length, `${name}.md lost its backticked leveret.* references`).toBeGreaterThanOrEqual(2);
+      for (const tool of tools) {
         expect(registered, `${name}.md references unknown tool ${tool}`).toContain(tool);
       }
     }

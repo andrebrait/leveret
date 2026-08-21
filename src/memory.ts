@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { appendFile, mkdir, readFile, writeFile } from "node:fs/promises";
+import { appendFile, mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { dirname, join, matchesGlob } from "node:path";
 import type { Finding } from "./findings.js";
 
@@ -63,14 +63,22 @@ export async function memoryList(opts: { repo: string }): Promise<MemoryEntry[]>
     return [];
   }
   const applied = await readApplied(opts.repo);
-  return raw
-    .split("\n")
-    .filter((l) => l.trim())
-    .map((l) => {
-      const e = JSON.parse(l) as MemoryEntry;
-      if (applied[e.fp]) e.lastApplied = applied[e.fp];
-      return e;
-    });
+  const entries: MemoryEntry[] = [];
+  const lines = raw.split("\n");
+  for (let i = 0; i < lines.length; i++) {
+    if (!lines[i]!.trim()) continue;
+    let e: MemoryEntry;
+    try {
+      e = JSON.parse(lines[i]!) as MemoryEntry;
+    } catch (err) {
+      // The file is versioned by design, so merge-conflict markers are the
+      // realistic corruption; fail loud but diagnosable, never a bare SyntaxError.
+      throw new Error(`${memPath(opts.repo)}:${i + 1}: malformed memory entry (${String(err).slice(0, 80)})`);
+    }
+    if (applied[e.fp]) e.lastApplied = applied[e.fp];
+    entries.push(e);
+  }
+  return entries;
 }
 
 export async function remember(opts: {
@@ -88,6 +96,14 @@ export async function remember(opts: {
   if (!opts.reason) throw new Error("memory entry needs a reason");
   if (opts.fp.split("/").length < 3) {
     throw new Error(`fp must be engine/RULE/path-or-glob, got: ${opts.fp}`);
+  }
+  // A half-specified anchor must not silently widen an instance verdict into a
+  // class-wide suppression: demand both halves or neither.
+  if (Boolean(opts.anchorFile) !== (opts.anchorLine !== undefined)) {
+    throw new Error("anchor needs BOTH anchorFile and anchorLine (or neither)");
+  }
+  if (opts.anchorLine !== undefined && opts.anchorLine < 1) {
+    throw new Error(`anchorLine must be >= 1, got ${opts.anchorLine}`);
   }
   let anchor: string | undefined;
   if (opts.anchorFile && opts.anchorLine) {
@@ -154,7 +170,12 @@ export async function applyMemory(
     const stamps = await readApplied(repo);
     for (const e of applied) stamps[e.fp] = today;
     await ensureStore(repo);
-    await writeFile(appliedPath(repo), `${JSON.stringify(stamps, null, 1)}\n`);
+    // tmp + rename: a crash mid-write must not leave a torn file that the next
+    // reader silently resets to {} (ponytail: still last-writer-wins between
+    // concurrent scans; per-repo locking if that ever bites)
+    const tmp = `${appliedPath(repo)}.${process.pid}.${Math.random().toString(36).slice(2, 8)}`;
+    await writeFile(tmp, `${JSON.stringify(stamps, null, 1)}\n`);
+    await rename(tmp, appliedPath(repo));
   }
   return { kept, suppressed: [...tally.values()] };
 }

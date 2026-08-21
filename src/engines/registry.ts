@@ -8,8 +8,9 @@ export interface ScanContext {
   base?: string;
   /** this engine's profile-declared rule packs (semgrep configs, ast-grep sgconfig) */
   rules?: string[];
-  /** this engine's full profile block, for engine-specific keys (jscpd corpus) */
-  engineProfile?: { corpus?: string[]; minTokens?: number };
+  /** this engine's full profile block, for engine-specific keys (jscpd corpus,
+   * semgrep registry opt-out) */
+  engineProfile?: { corpus?: string[]; minTokens?: number; registry?: boolean };
 }
 
 export interface Engine {
@@ -30,15 +31,23 @@ function sev(raw: string, map: Record<string, Severity>): Severity {
 const semgrep: Engine = {
   id: "semgrep",
   bin: "semgrep",
-  select: (ctx) => byExt(ctx.files, ["php", "inc", "py", "sh", "js", "ts"]),
+  // registry: false (profile) keeps scans fully offline; without local rule packs
+  // there is then nothing to run with, so the engine deselects itself.
+  select: (ctx) =>
+    ctx.engineProfile?.registry === false && !ctx.rules?.length
+      ? []
+      : byExt(ctx.files, ["php", "inc", "py", "sh", "js", "ts"]),
   async scan(ctx, selected) {
-    const configs = new Set(["p/security-audit"]);
-    for (const f of selected) {
-      const e = ext(f);
-      if (e === "php" || e === "inc") configs.add("p/php");
-      if (e === "py") configs.add("p/python");
-      if (e === "sh") configs.add("p/bash");
-      if (e === "js" || e === "ts") configs.add("p/javascript");
+    const configs = new Set<string>();
+    if (ctx.engineProfile?.registry !== false) {
+      configs.add("p/security-audit");
+      for (const f of selected) {
+        const e = ext(f);
+        if (e === "php" || e === "inc") configs.add("p/php");
+        if (e === "py") configs.add("p/python");
+        if (e === "sh") configs.add("p/bash");
+        if (e === "js" || e === "ts") configs.add("p/javascript");
+      }
     }
     const args = ["scan", "--json", "--metrics=off", "--quiet"];
     for (const c of configs) args.push("--config", c);
