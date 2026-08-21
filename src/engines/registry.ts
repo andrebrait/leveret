@@ -1,4 +1,4 @@
-import { run, which } from "../exec.js";
+import { run, scratchPath, which } from "../exec.js";
 import type { Finding, Severity } from "../findings.js";
 
 export interface ScanContext {
@@ -147,7 +147,7 @@ const gitleaks: Engine = {
   // Range engine: scans commits base..HEAD, so any non-empty change set applies.
   select: (ctx) => (ctx.base && ctx.files.length > 0 ? ctx.files : []),
   async scan(ctx) {
-    const report = `${process.env.TMPDIR ?? "/tmp"}/leveret-gitleaks-${process.pid}.json`;
+    const report = `${scratchPath("leveret-gitleaks")}.json`;
     const r = await run(
       "gitleaks",
       [
@@ -320,6 +320,12 @@ const typos: Engine = {
   select: (ctx) => ctx.files, // typos skips binaries on its own
   async scan(ctx, selected) {
     const r = await run("typos", ["--format", "json", ...selected], ctx.repo);
+    // typos exits 0 (clean) or 2 (typos found); anything else is a crash — e.g. a
+    // malformed _typos.toml in the scanned repo exits 78 with EMPTY stdout, which
+    // the line parser would otherwise fail-open into a lying "clean".
+    if (r.code !== 0 && r.code !== 2) {
+      throw new Error(`typos rc=${r.code}${r.signal ? ` signal=${r.signal}` : ""}: ${r.stderr.slice(0, 300)}`);
+    }
     const findings = [];
     for (const line of r.stdout.split("\n")) {
       if (!line.trim()) continue;
@@ -351,7 +357,7 @@ const jscpd: Engine = {
   // thereby opts the repo in (whole-corpus runs cost real time).
   select: (ctx) => (ctx.engineProfile?.corpus?.length ? ctx.files : []),
   async scan(ctx, selected) {
-    const out = `${process.env.TMPDIR ?? "/tmp"}/leveret-jscpd-${process.pid}`;
+    const out = scratchPath("leveret-jscpd");
     const args = [
       "--reporters",
       "json",

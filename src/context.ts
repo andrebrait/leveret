@@ -1,4 +1,4 @@
-import { run } from "./exec.js";
+import { run, which } from "./exec.js";
 
 // Prioritization context for the review agent: not findings, signal. A function
 // with high complexity in a file churned thirty times this year deserves the
@@ -14,11 +14,15 @@ export interface FunctionInfo {
 
 export interface FileContext {
   file: string;
-  /** commits touching this file in the trailing 12 months */
-  churn: number;
+  /** commits touching this file in the trailing 12 months; null if git failed */
+  churn: number | null;
   /** date of the last commit touching it, or null for untracked files */
   lastTouched: string | null;
-  functions: FunctionInfo[];
+  /** null when complexity could not be measured — a missing tool must not read
+   * as "zero-complexity stable code" and invert the prioritization signal */
+  functions: FunctionInfo[] | null;
+  /** set when a backing tool was missing or failed */
+  error?: string;
 }
 
 // lizard --csv: nloc,ccn,tokens,params,length,"name@start-end@file",file,name,long_name,start,end
@@ -43,8 +47,18 @@ function parseLizard(csv: string): Map<string, FunctionInfo[]> {
 }
 
 export async function context(opts: { repo: string; files: string[] }): Promise<FileContext[]> {
-  const lizard = await run("lizard", ["--csv", ...opts.files], opts.repo);
-  const functions = parseLizard(lizard.stdout);
+  let functions: Map<string, FunctionInfo[]> | null = null;
+  let lizardError: string | undefined;
+  if (!(await which("lizard"))) {
+    lizardError = "lizard not on PATH: complexity unavailable";
+  } else {
+    const lizard = await run("lizard", ["--csv", ...opts.files], opts.repo);
+    if (lizard.code === 0) {
+      functions = parseLizard(lizard.stdout);
+    } else {
+      lizardError = `lizard rc=${lizard.code}: ${lizard.stderr.slice(0, 200)}`;
+    }
+  }
 
   const out: FileContext[] = [];
   for (const file of opts.files) {
@@ -53,12 +67,16 @@ export async function context(opts: { repo: string; files: string[] }): Promise<
       ["log", "--since=12 months ago", "--follow", "--format=%cs", "--", file],
       opts.repo,
     );
-    const dates = log.stdout.split("\n").filter(Boolean);
+    const gitOk = log.code === 0;
+    const dates = gitOk ? log.stdout.split("\n").filter(Boolean) : [];
     out.push({
       file,
-      churn: dates.length,
+      churn: gitOk ? dates.length : null,
       lastTouched: dates[0] ?? null,
-      functions: functions.get(file) ?? [],
+      functions: functions ? (functions.get(file) ?? []) : null,
+      ...(lizardError || !gitOk
+        ? { error: [lizardError, gitOk ? null : `git log rc=${log.code}`].filter(Boolean).join("; ") }
+        : {}),
     });
   }
   return out;
