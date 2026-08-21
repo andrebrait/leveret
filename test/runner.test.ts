@@ -60,3 +60,26 @@ describe("parseOmpEvents", () => {
     expect(() => parseOmpEvents('{"type":"session"}')).toThrow(/no JSON/i);
   });
 });
+
+describe("run() timeout (stuck-tool cap)", () => {
+  it("kills a wedged child and reports the signal instead of waiting forever", async () => {
+    const { run } = await import("../src/exec.js");
+    const t0 = Date.now();
+    const r = await run("sleep", ["30"], "/tmp", { timeoutMs: 300 });
+    expect(Date.now() - t0).toBeLessThan(5000);
+    expect(r.code).not.toBe(0);
+    expect(r.signal).toBeTruthy();
+  });
+});
+
+describe("buildMcpConfig", () => {
+  it("wires the leveret MCP server and codegraph for the reviewed checkout", async () => {
+    const { buildMcpConfig } = await import("../src/runner/omp.js");
+    const cfg = buildMcpConfig("/opt/leveret/dist/runner/omp.js", true);
+    expect(cfg.mcpServers.leveret.command).toBe("node");
+    expect(cfg.mcpServers.leveret.args).toEqual(["/opt/leveret/dist/server.js"]);
+    expect(cfg.mcpServers.codegraph).toEqual({ command: "codegraph", args: ["serve", "--mcp"] });
+    const noGraph = buildMcpConfig("/opt/leveret/dist/runner/omp.js", false);
+    expect(noGraph.mcpServers.codegraph).toBeUndefined();
+  });
+});

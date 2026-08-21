@@ -6,6 +6,7 @@ import { createServer, type IncomingMessage, type ServerResponse } from "node:ht
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
+import { loadProfile } from "../profile.js";
 import { scan } from "../scan.js";
 import type { Finding, ScanResult } from "../findings.js";
 import { ensureGraph } from "./graph.js";
@@ -17,7 +18,7 @@ import {
   saveCredentials,
   type AppCredentials,
 } from "./manifest.js";
-import { ackMessage, doneMessage, failMessage, renderInline, renderWalkthrough, type Tier, type VerifyOutput } from "./render.js";
+import { ackMessage, doneMessage, failMessage, renderInline, renderWalkthrough, skipMessage, type Tier, type VerifyOutput } from "./render.js";
 import { routeEvent, verifySignature, type Job } from "./webhook.js";
 
 // The App layer: GitHub plumbing only. It holds the App key and webhook secret —
@@ -63,21 +64,36 @@ function reportFromScan(result: ScanResult): VerifyOutput {
 
 async function reviewJob(job: Extract<Job, { kind: "review" }>, creds: AppCredentials): Promise<void> {
   const app = job.installationId ? makeApp({ appId: creds.appId, privateKey: creds.privateKey }) : null;
-  // the friendly heads-up, EDITED to the outcome when the job ends — a PR should
-  // never show a silent bot or an eternal "working on it"
   let ackId: number | undefined;
-  if (app && job.installationId) {
-    const model = process.env.LEVERET_RUNNER_MODEL ?? "gpt-5.6-sol";
-    ackId = await postComment(app, job.installationId, job.repo, job.pr, ackMessage(job.headSha, model)).catch(
-      () => undefined,
-    );
-  }
   const work = await mkdtemp(join(tmpdir(), "leveret-app-"));
   try {
     await exec("git", ["clone", "--quiet", job.cloneUrl, work]);
     await exec("git", ["fetch", "--quiet", "origin", `pull/${job.pr}/head`], { cwd: work });
     await exec("git", ["checkout", "--quiet", job.headSha], { cwd: work });
     const base = `origin/${job.baseRef}`;
+
+    // the repo's config may ask Leveret to stand down — say so once, then leave
+    const profile = await loadProfile(join(work, ".leveret.yml"));
+    let skipReason: string | null = null;
+    if (!profile.review.enabled) skipReason = "`review.enabled` is false in `.leveret.yml`";
+    else if (profile.review.skipTitle && new RegExp(profile.review.skipTitle).test(job.title)) {
+      skipReason = `the PR title matches \`review.skipTitle\` (\`${profile.review.skipTitle}\`)`;
+    }
+    if (skipReason) {
+      if (app && job.installationId && job.action === "opened") {
+        await postComment(app, job.installationId, job.repo, job.pr, skipMessage(skipReason)).catch(() => {});
+      }
+      return;
+    }
+
+    // the friendly heads-up, EDITED to the outcome when the job ends — a PR should
+    // never show a silent bot or an eternal "working on it"
+    if (app && job.installationId) {
+      const model = process.env.LEVERET_RUNNER_MODEL ?? "gpt-5.6-sol";
+      ackId = await postComment(app, job.installationId, job.repo, job.pr, ackMessage(job.headSha, model)).catch(
+        () => undefined,
+      );
+    }
     // the checkout gets its code graph before any agent looks at it (owner ruling:
     // the graph is derived and always buildable — structure is queried, not grepped)
     const graph = await ensureGraph(work);

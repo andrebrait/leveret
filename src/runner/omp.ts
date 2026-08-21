@@ -5,7 +5,9 @@
 // {report, verdicts, coverage}, printed on stdout for the App to render.
 
 import { execFile } from "node:child_process";
+import { existsSync } from "node:fs";
 import { mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { dirname } from "node:path";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
@@ -106,6 +108,23 @@ export function parseOmpEvents(stream: string): OmpRunResult {
   return { json, toolCalls, mcpCalls };
 }
 
+export interface McpConfig {
+  mcpServers: Record<string, { command: string; args: string[] }>;
+}
+
+/** The agent's toolbelt over MCP: leveret's own server (resolved beside this
+ * runner script) and codegraph when the graph is live. omp integrates serena
+ * natively, so it needs no entry here. */
+export function buildMcpConfig(runnerScriptPath: string, graphLive: boolean): McpConfig {
+  const serverPath = join(dirname(dirname(runnerScriptPath)), "server.js");
+  return {
+    mcpServers: {
+      leveret: { command: "node", args: [serverPath] },
+      ...(graphLive ? { codegraph: { command: "codegraph", args: ["serve", "--mcp"] } } : {}),
+    },
+  };
+}
+
 const COMPACTION_OVERLAY = `compaction:
   enabled: false
   midTurnEnabled: false
@@ -151,9 +170,17 @@ export async function main(): Promise<void> {
   const params = cliParams(process.argv.slice(2));
   const args = buildOmpArgs(params, process.env);
 
-  // serena pre-warm is best-effort: the agent degrades to ast_search/grep without it
+  // serena pre-warm is best-effort AND hard-capped: a wedged index must never
+  // stall the review (it did, once — the first live PR sat 13 minutes behind it)
   if (await which("serena")) {
-    await run("serena", ["project", "index", repo], repo);
+    await run("serena", ["project", "index", repo], repo, { timeoutMs: 120_000 });
+  }
+
+  // the agent's MCP toolbelt: written into the checkout unless the repo ships its own
+  const mcpPath = join(repo, ".mcp.json");
+  if (!existsSync(mcpPath)) {
+    const scriptPath = process.argv[1] ?? "";
+    await writeFile(mcpPath, JSON.stringify(buildMcpConfig(scriptPath, process.env.LEVERET_GRAPH === "1"), null, 1));
   }
 
   const overlayPath = join(await mkdtemp(join(tmpdir(), "leveret-runner-")), "overlay.yml");
