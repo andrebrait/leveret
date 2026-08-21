@@ -70,3 +70,69 @@ export async function updateComment(
   const [owner, name] = repo.split("/") as [string, string];
   await octokit.rest.issues.updateComment({ owner, repo: name, comment_id: commentId, body });
 }
+
+/** The bot's review threads on a PR, for incremental re-review. */
+export async function fetchReviewThreads(
+  app: App,
+  installationId: number,
+  repo: string,
+  pr: number,
+): Promise<unknown> {
+  const octokit = await app.getInstallationOctokit(installationId);
+  const [owner, name] = repo.split("/") as [string, string];
+  return octokit.graphql(
+    `query($owner: String!, $name: String!, $pr: Int!) {
+      repository(owner: $owner, name: $name) {
+        pullRequest(number: $pr) {
+          reviewThreads(first: 100) {
+            nodes {
+              id
+              isResolved
+              path
+              line
+              comments(first: 1) { nodes { databaseId author { login } body } }
+            }
+          }
+        }
+      }
+    }`,
+    { owner, name, pr },
+  ).then((data) => ({ data }));
+}
+
+export async function resolveThread(
+  app: App,
+  installationId: number,
+  threadId: string,
+): Promise<void> {
+  const octokit = await app.getInstallationOctokit(installationId);
+  await octokit.graphql(
+    `mutation($id: ID!) { resolveReviewThread(input: { threadId: $id }) { thread { id } } }`,
+    { id: threadId },
+  );
+}
+
+export async function replyInThread(
+  app: App,
+  installationId: number,
+  repo: string,
+  pr: number,
+  commentId: number,
+  body: string,
+): Promise<void> {
+  const octokit = await app.getInstallationOctokit(installationId);
+  const [owner, name] = repo.split("/") as [string, string];
+  await octokit.rest.pulls.createReplyForReviewComment({
+    owner,
+    repo: name,
+    pull_number: pr,
+    comment_id: commentId,
+    body,
+  });
+}
+
+/** the App's own bot login, e.g. "my-app[bot]" */
+export async function botLogin(app: App): Promise<string> {
+  const { data } = await app.octokit.request("GET /app");
+  return `${(data as { slug: string }).slug}[bot]`;
+}

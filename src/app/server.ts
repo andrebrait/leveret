@@ -10,7 +10,8 @@ import { loadProfile } from "../profile.js";
 import { scan } from "../scan.js";
 import type { Finding, ScanResult } from "../findings.js";
 import { ensureGraph } from "./graph.js";
-import { makeApp, postComment, postReview, updateComment } from "./github.js";
+import { botLogin, fetchReviewThreads, makeApp, postComment, postReview, replyInThread, resolveThread, updateComment } from "./github.js";
+import { parsePriorThreads, resolvedReply, type PriorFinding } from "./incremental.js";
 import {
   convertManifestCode,
   loadCredentials,
@@ -104,6 +105,20 @@ async function reviewJob(job: Extract<Job, { kind: "review" }>, creds: AppCreden
     if (!graph.ok) log.warn("codegraph unavailable", { detail: graph.detail });
     const result = await scan({ repo: work, base });
 
+    // incremental re-review: hand the runner the bot's own unresolved threads
+    let prior: PriorFinding[] = [];
+    if (app && job.installationId && job.action !== "opened") {
+      try {
+        const threads = await fetchReviewThreads(app, job.installationId, job.repo, job.pr);
+        prior = parsePriorThreads(threads as Parameters<typeof parsePriorThreads>[0], await botLogin(app));
+        if (prior.length > 0) {
+          await writeFile(join(work, ".leveret-prior.json"), JSON.stringify(prior, null, 1));
+        }
+      } catch (err) {
+        log.warn("prior-thread fetch failed; reviewing without incremental context", { err });
+      }
+    }
+
     let verify: VerifyOutput;
     if (process.env.LEVERET_RUNNER) {
       const leadsPath = join(work, ".leveret-leads.json");
@@ -118,6 +133,7 @@ async function reviewJob(job: Extract<Job, { kind: "review" }>, creds: AppCreden
           LEVERET_BASE: base,
           LEVERET_LEADS: leadsPath,
           LEVERET_GRAPH: graph.ok ? "1" : "0",
+          ...(prior.length > 0 ? { LEVERET_PRIOR: join(work, ".leveret-prior.json") } : {}),
         },
       });
       verify = JSON.parse(r.stdout) as VerifyOutput;
@@ -138,7 +154,23 @@ async function reviewJob(job: Extract<Job, { kind: "review" }>, creds: AppCreden
       if (ackId) {
         await updateComment(app, job.installationId, job.repo, ackId, doneMessage(verify)).catch(() => {});
       }
-      log.info("review posted", { findings: verify.report.length });
+      // act on the verifier's resolutions: short reply + resolve the thread
+      for (const res of verify.resolutions ?? []) {
+        if (res.status !== "resolved") continue;
+        const pf = prior.find((p) => p.threadId === res.threadId);
+        try {
+          if (pf?.commentId) {
+            await replyInThread(app, job.installationId, job.repo, job.pr, pf.commentId, resolvedReply(res.note, job.headSha));
+          }
+          await resolveThread(app, job.installationId, res.threadId);
+        } catch (err) {
+          log.warn("thread resolution failed", { threadId: res.threadId, err });
+        }
+      }
+      log.info("review posted", {
+        findings: verify.report.length,
+        resolved: (verify.resolutions ?? []).filter((r) => r.status === "resolved").length,
+      });
     } else {
       console.log(renderWalkthrough(verify, result, graph));
     }

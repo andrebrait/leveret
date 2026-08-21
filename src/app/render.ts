@@ -1,3 +1,4 @@
+import { renderResolutions } from "./incremental.js";
 import type { Finding, ScanResult } from "../findings.js";
 import type { GraphStatus } from "./graph.js";
 
@@ -23,6 +24,7 @@ export interface ReportItem {
 export interface VerifyOutput {
   report: ReportItem[];
   verdicts: { id: string; grade: string; reason?: string }[];
+  resolutions?: { threadId: string; status: "resolved" | "still-open"; note: string }[];
   coverage: {
     lenses: { lens: string; outcome: string }[];
     files: { file: string; verdict: string; note?: string }[];
@@ -95,6 +97,10 @@ export function renderWalkthrough(
         ? "Code graph: live (structural blast radius queried, not greped)."
         : `Code graph: unavailable — ${graph.detail ?? "unknown"}; blast radius fell back to ast_search/grep.`,
     );
+  }
+  {
+    const ledger = renderResolutions(v.resolutions ?? []);
+    if (ledger) s.push("", ledger);
   }
   s.push("", "### Engines", "", "| engine | status | found | kept |", "| --- | --- | --- | --- |");
   for (const e of scan.engines) {

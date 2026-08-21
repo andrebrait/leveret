@@ -257,12 +257,16 @@ export async function main(): Promise<void> {
   const leads = process.env.LEVERET_LEADS
     ? await readFile(process.env.LEVERET_LEADS, "utf8")
     : "(scan leads unavailable)";
+  const prior = process.env.LEVERET_PRIOR
+    ? await readFile(process.env.LEVERET_PRIOR, "utf8")
+    : "";
   const verifyPrompt = [
     await loadContract("verify", { repo, base }),
     "\n## The review agent's concerns to verify\n",
     concerns,
     "\n## The scan leads\n",
     leads,
+    ...(prior ? ["\n## The bot's previously posted findings on this PR (judge each; emit resolutions)\n", prior] : []),
   ].join("\n");
   const verify = await phase(repo, verifyPrompt, args, overlayPath);
 
