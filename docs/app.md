@@ -8,6 +8,19 @@ model side stays BYOAI through the runner hook below.
 
 ## Create the App (one-click manifest flow)
 
+The easy path — the server creates the App for you:
+
+1. Start the server unconfigured (just `LEVERET_PUBLIC_URL` set to where GitHub
+   can reach you — a tunnel/smee URL is fine): `node dist/app/server.js`.
+2. Open `http://127.0.0.1:8090/setup` (add `?org=<name>` to create under an
+   organization) and click **Create the App on GitHub**.
+3. GitHub shows one confirmation screen, creates the App **under your account**
+   (webhook already pointing at your server), and redirects back; the credentials
+   are stored in the data dir on this machine only. Follow the install link and
+   pick your repositories. Done.
+
+Manual path (equivalent, if you prefer the form):
+
 1. GitHub → Settings → Developer settings → GitHub Apps → New GitHub App.
 2. Webhook URL: wherever GitHub can reach you — a NAT'd box needs no exposed port:
    - testing: a [smee.io](https://smee.io) channel, relayed locally with
