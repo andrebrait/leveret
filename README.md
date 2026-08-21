@@ -8,9 +8,11 @@ A leveret is a young hare — small, fast, and born with its eyes open.
 
 Leveret is a self-hosted, hybrid engine for private code reviews: the successor to
 hosted AI review bots for teams whose code stays home. Deterministic static analysis,
-AST-level search, and a graded filtering pipeline exposed over MCP, driven by whatever
-reviewing agent you bring (BYOM — Claude Code, a local model via any MCP-capable
-client, or a CI runner). The engine layer itself never calls an LLM.
+AST-level search, and a graded filtering pipeline exposed over MCP, driven by the AI
+you bring (BYOAI: your provider and model — Anthropic or OpenAI by API key or
+subscription, or a local OpenAI-compatible endpoint — through an MCP-capable client
+like Claude Code interactively, or the GitHub App's standardized runner
+autonomously). The engine layer itself never calls an LLM.
 
 Pipeline the project targets:
 
