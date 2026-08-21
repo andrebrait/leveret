@@ -37,6 +37,10 @@ for (const pr of prs) {
   }
   git(repo, "worktree", "add", "-q", "--detach", wt, head);
   try {
+    // every bench checkout gets its graph — agents query structure, never handicapped
+    const { ensureGraph } = await import("../src/app/graph.js");
+    const graph = await ensureGraph(wt);
+    if (!graph.ok) console.error(`PR#${pr}: ${graph.detail}`);
     const files = await changedFiles(wt, base);
     const result = await scan({ repo: wt, base, profilePath });
     writeFileSync(join(outDir, `pr${pr}.json`), JSON.stringify({ pr, head, base, files, result }, null, 1));

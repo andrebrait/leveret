@@ -7,6 +7,7 @@ import { join } from "node:path";
 import { promisify } from "node:util";
 import { scan } from "../scan.js";
 import type { Finding, ScanResult } from "../findings.js";
+import { ensureGraph } from "./graph.js";
 import { makeApp, postReview } from "./github.js";
 import { renderInline, renderWalkthrough, type Tier, type VerifyOutput } from "./render.js";
 import { routeEvent, verifySignature, type Job } from "./webhook.js";
@@ -61,6 +62,10 @@ async function reviewJob(job: Extract<Job, { kind: "review" }>): Promise<void> {
     await exec("git", ["fetch", "--quiet", "origin", `pull/${job.pr}/head`], { cwd: work });
     await exec("git", ["checkout", "--quiet", job.headSha], { cwd: work });
     const base = `origin/${job.baseRef}`;
+    // the checkout gets its code graph before any agent looks at it (owner ruling:
+    // the graph is derived and always buildable — structure is queried, not grepped)
+    const graph = await ensureGraph(work);
+    if (!graph.ok) console.warn(`codegraph unavailable for ${job.repo}#${job.pr}: ${graph.detail}`);
     const result = await scan({ repo: work, base });
 
     let verify: VerifyOutput;
@@ -71,7 +76,7 @@ async function reviewJob(job: Extract<Job, { kind: "review" }>): Promise<void> {
       const r = await exec(cmd, args, {
         cwd: work,
         maxBuffer: 64 * 1024 * 1024,
-        env: { ...process.env, LEVERET_REPO: work, LEVERET_BASE: base, LEVERET_LEADS: leadsPath },
+        env: { ...process.env, LEVERET_REPO: work, LEVERET_BASE: base, LEVERET_LEADS: leadsPath, LEVERET_GRAPH: graph.ok ? "1" : "0" },
       });
       verify = JSON.parse(r.stdout) as VerifyOutput;
     } else {
