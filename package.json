@@ -1,10 +1,11 @@
 {
   "name": "leveret",
   "version": "0.1.0",
-  "description": "leveret — self-hosted, hybrid engine for private code reviews: per-change static-analysis engine selection, normalized findings, graded filtering, over MCP.",
+  "description": "leveret \u2014 self-hosted, hybrid engine for private code reviews: per-change static-analysis engine selection, normalized findings, graded filtering, over MCP.",
   "type": "module",
   "bin": {
-    "leveret": "dist/server.js"
+    "leveret": "dist/server.js",
+    "leveret-app": "dist/app/server.js"
   },
   "scripts": {
     "build": "tsc",
@@ -14,6 +15,7 @@
   "license": "AGPL-3.0-or-later",
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.30.0",
+    "octokit": "^5.0.5",
     "yaml": "^2.9.0",
     "zod": "^4.4.3"
   },

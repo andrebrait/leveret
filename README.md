@@ -48,6 +48,11 @@ Claude Code registration:
 claude mcp add leveret -- node /Users/andre/git/leveret/dist/server.js
 ```
 
+## GitHub App
+
+See [docs/app.md](docs/app.md) — self-hosted App layer (webhooks, review posting,
+learn feed; no model keys) with the BYOAI runner hook.
+
 ## Status / roadmap
 
 See [DESIGN.md](DESIGN.md) — architecture, the three-grade filter (actionable /
