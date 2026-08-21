@@ -223,7 +223,15 @@ serves the ultimate goal: a leveret-authored reviewer system prompt (plenty of
 harnesses publish theirs to learn from). Sequence: `leveret-runner-omp` is the MVP;
 the first trial runs WITHOUT touching the system prompt; extras related to LSP and
 AST navigation, and any output compaction/capturing, are turned off in either
-harness. Evaluate pi + custom system prompt after the MVP proves the seam. The MCP + skill path (running reviews
+harness. Evaluate pi + custom system prompt after the MVP proves the seam.
+
+`leveret-runner-omp` parameterization (owner, 2026-08-21): callers configure it via
+CLI args and env vars (CLI wins) — model (default gpt-5.6-sol), thinking (default
+high), per-phase max-time, and a raw omp passthrough for provider-shaped flags
+(profile, api-key, provider) so new omp capabilities need no runner release. The
+purity flags (no-skills/extensions/rules/session/lsp, compaction off) are NOT
+overridable — they are the standardization — and the effective harness + version +
+model + thinking always land in the walkthrough's run-configuration line. The MCP + skill path (running reviews
 inside the user's own client, their harness by design) is deliberately NOT
 standardized: a human is present there to judge; consistency matters where reviews
 are autonomous and comparable.
