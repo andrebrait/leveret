@@ -13,6 +13,7 @@ model side stays BYOAI through the runner hook below.
 3. Permissions: **Pull requests: Read & write**, **Contents: Read**.
    Subscribe to events: **Pull request**, **Pull request review comment**.
 4. Generate a private key; note the App ID. Install the App on your repos.
+5. Upload [`assets/logo.png`](../assets/logo.png) as the App logo.
 
 ## Run the server
 

@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/logo.svg" width="200" alt="Leveret logo">
+</p>
+
 # leveret
 
 A leveret is a young hare — small, fast, and born with its eyes open.
