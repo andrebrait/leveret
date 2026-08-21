@@ -142,6 +142,28 @@ Deliberately not wrapped: code-graph queries (CodeGraph MCP exists), LSP diagnos
 (client surface), shell probes (the driving agent already executes commands — leveret
 never needs its own sandbox because the agent *is* the sandbox).
 
+## Deployment modes and conversational state (owner decisions, 2026-08-21)
+
+**Both modes ship.** GitHub Actions is the canonical zero-infrastructure path for a
+FOSS self-hostable reviewer: `on: pull_request` replaces the webhook (GitHub
+delivers events to its own runners), a workflow file is the whole install, and a
+self-hosted runner keeps model credentials at home with no inbound port (it polls
+outbound). The webhook App server remains the always-on option for hosts that want
+App identity and instant reviews. Both are thin entries over the same
+scan/runner/renderer internals. Known shared wart: fork PRs get a read-only token —
+punted for MVP.
+
+**Sessions persist; threads are conversational.** The runner's agent session (omp
+`--session-dir`/`--resume`) is saved per PR — Actions cache with artifact fallback,
+`LEVERET_DATA` in webhook mode. A reply in a finding thread triggers a run that
+restores the session and resumes it with the comment: the agent answers with full
+memory of its own review and evidence, can re-verify and concede or defend, posts
+in-thread, and routes rulings into `learn`. Cache eviction degrades gracefully to a
+fresh read of the PR. Session transcripts contain code and reasoning; they live in
+the repo's own Actions storage or the self-hosted box — the same trust domain as
+the code. Build order: Actions review workflow, then session persistence + reply
+resume, then App-server session parity.
+
 ## Reporting (product decision, 2026-08-21)
 
 Findings publish in **importance tiers** — `critical / major / minor / nit` — a
