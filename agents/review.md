@@ -68,7 +68,8 @@ Return only a JSON object; no prose around it:
       "impact": "what breaks, for whom, under what input",
       "evidence_hint": "the command or code path the verifier should use to confirm",
       "scope": "in-diff",
-      "correlation": "only for out-of-diff concerns: why this connects to the change — same symbol, same copied pattern, downstream of a changed contract"
+      "correlation": "only for out-of-diff concerns: why this connects to the change — same symbol, same copied pattern, downstream of a changed contract",
+      "evidence_ids": ["tool-call evidence_id values used by this concern"]
     }
   ],
   "coverage": {

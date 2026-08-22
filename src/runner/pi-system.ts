@@ -20,7 +20,9 @@ Tool routing:
 - lsp_*: definitions, implementations, semantic references, symbols, and diagnostics.
 - leveret_ast_search: syntax-shaped occurrences and repeated structural patterns.
 - leveret_probe: runtime evidence, only when the sandboxed tool is available.
-- read/grep/find/ls: narrow fallback discovery; do not re-derive a live graph or LSP result file by file.
+- leveret_read/leveret_grep/leveret_find/leveret_ls: checkout-contained fallback discovery; do not re-derive a live graph or LSP result file by file.
+
+Every tool result begins with an evidence_id. When a concern or finding relies on a tool result, include that identifier in its evidence_ids array.
 
 Choose the surface whose semantics match the question. The routing is guidance, not a substitute for judgment. Finish the phase even when one optional surface is unavailable, and account honestly for what was not examined.
 

@@ -1,11 +1,13 @@
 import { defineTool, type ToolDefinition } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 import { isAbsolute, relative, resolve, sep } from "node:path";
+import { readFile, readdir, realpath } from "node:fs/promises";
 import { astSearch } from "../astsearch.js";
 import { context } from "../context.js";
 import { run, safeChildEnvironment } from "../exec.js";
-import { learn, memoryList, remember } from "../memory.js";
+import { memoryList } from "../memory.js";
 import { scan } from "../scan.js";
+import { ENGINES } from "../engines/registry.js";
 import type { SerenaBridge } from "./serena.js";
 
 function json(value: unknown) {
@@ -31,11 +33,36 @@ function inside(root: string, candidate: string): boolean {
   return rel === "" || (!rel.startsWith(`..${sep}`) && rel !== ".." && !isAbsolute(rel));
 }
 
+async function jailedPath(root: string, requested = "."): Promise<string> {
+  if (isAbsolute(requested)) throw new Error("tool paths must be relative to the reviewed checkout");
+  const canonicalRoot = await realpath(root);
+  const canonical = await realpath(resolve(root, requested));
+  if (!inside(canonicalRoot, canonical)) throw new Error("tool path escapes the reviewed checkout");
+  return canonical;
+}
+
+function annotateEvidence(tool: ToolDefinition): ToolDefinition {
+  const execute = tool.execute.bind(tool);
+  return {
+    ...tool,
+    async execute(toolCallId, params, signal, onUpdate, context) {
+      const result = await execute(toolCallId, params as never, signal, onUpdate, context);
+      return {
+        ...result,
+        content: [{ type: "text" as const, text: `evidence_id: ${toolCallId}` }, ...result.content],
+      };
+    },
+  };
+}
+
 export interface PiToolsOptions {
   repo: string;
   graphLive: boolean;
   sandboxed: boolean;
   serena?: SerenaBridge;
+  profilePath: string;
+  memoryRepo: string;
+  base: string;
 }
 
 export interface PiToolsBundle {
@@ -48,6 +75,70 @@ export async function buildPiTools(options: PiToolsOptions): Promise<PiToolsBund
   const { repo } = options;
   const tools: ToolDefinition[] = [
     defineTool({
+      name: "leveret_read",
+      label: "Read reviewed file",
+      description: "Read a UTF-8 text file contained by the reviewed checkout. Absolute paths and escaping symlinks are rejected.",
+      parameters: Type.Object({
+        path: Type.String(),
+        line_start: Type.Optional(Type.Number({ minimum: 1 })),
+        line_end: Type.Optional(Type.Number({ minimum: 1 })),
+      }),
+      async execute(_id, params) {
+        const path = await jailedPath(repo, params.path);
+        const raw = await readFile(path);
+        if (raw.includes(0)) throw new Error("binary files are not readable through leveret_read");
+        const lines = raw.toString("utf8").split("\n");
+        const start = params.line_start ?? 1;
+        const end = Math.min(params.line_end ?? start + 399, lines.length);
+        if (end < start) throw new Error("line_end must be >= line_start");
+        const body = lines.slice(start - 1, end).map((line, index) => `${start + index}: ${line}`).join("\n");
+        return text(body.slice(0, 100_000), { path: relative(repo, path), line_start: start, line_end: end });
+      },
+    }),
+    defineTool({
+      name: "leveret_grep",
+      label: "Search reviewed text",
+      description: "Regex-search files inside the reviewed checkout with ripgrep. Symlink escapes are rejected and symlinks are not followed.",
+      parameters: Type.Object({ pattern: Type.String(), path: Type.Optional(Type.String()) }),
+      async execute(_id, params) {
+        const path = await jailedPath(repo, params.path ?? ".");
+        const result = await run("rg", ["--line-number", "--no-heading", "--color", "never", "--max-count", "200", "--", params.pattern, path], repo, {
+          timeoutMs: 30_000,
+          env: safeChildEnvironment(),
+          maxBuffer: 2 * 1024 * 1024,
+        });
+        if (result.code !== 0 && result.code !== 1) throw new Error(`rg rc=${result.code}: ${result.stderr.slice(0, 500)}`);
+        return text(result.stdout.replaceAll(`${repo}/`, ""), { matches: result.stdout ? result.stdout.split("\n").length - 1 : 0 });
+      },
+    }),
+    defineTool({
+      name: "leveret_find",
+      label: "Find reviewed files",
+      description: "List files matching a glob inside the reviewed checkout. Symlinks are not followed.",
+      parameters: Type.Object({ glob: Type.String(), path: Type.Optional(Type.String()) }),
+      async execute(_id, params) {
+        const path = await jailedPath(repo, params.path ?? ".");
+        const result = await run("rg", ["--files", "--glob", params.glob, "--", path], repo, {
+          timeoutMs: 30_000,
+          env: safeChildEnvironment(),
+          maxBuffer: 2 * 1024 * 1024,
+        });
+        if (result.code !== 0 && result.code !== 1) throw new Error(`rg --files rc=${result.code}: ${result.stderr.slice(0, 500)}`);
+        return text(result.stdout.replaceAll(`${repo}/`, ""));
+      },
+    }),
+    defineTool({
+      name: "leveret_ls",
+      label: "List reviewed directory",
+      description: "List one directory contained by the reviewed checkout. Escaping symlinks are rejected.",
+      parameters: Type.Object({ path: Type.Optional(Type.String()) }),
+      async execute(_id, params) {
+        const path = await jailedPath(repo, params.path ?? ".");
+        const entries = await readdir(path, { withFileTypes: true });
+        return text(entries.sort((a, b) => a.name.localeCompare(b.name)).map((entry) => `${entry.name}${entry.isDirectory() ? "/" : ""}`).join("\n"));
+      },
+    }),
+    defineTool({
       name: "leveret_scan",
       label: "Leveret scan",
       description: "Run Leveret's deterministic engines. Results are review leads, not verdicts.",
@@ -57,7 +148,22 @@ export async function buildPiTools(options: PiToolsOptions): Promise<PiToolsBund
         engines: Type.Optional(Type.Array(Type.String())),
       }),
       async execute(_id, params) {
-        return json(await scan({ repo, ...params }));
+        const files = params.files
+          ? await Promise.all(params.files.map(async (file) => relative(repo, await jailedPath(repo, file))))
+          : undefined;
+        const engineIds = new Set(ENGINES.map((engine) => engine.id));
+        if (params.engines?.some((engine) => !engineIds.has(engine))) {
+          throw new Error("leveret_scan accepts built-in engines only");
+        }
+        return json(await scan({
+          repo,
+          base: options.base,
+          files,
+          engines: params.engines,
+          profilePath: options.profilePath,
+          memoryRepo: options.memoryRepo,
+          allowCustomEngines: false,
+        }));
       },
     }),
     defineTool({
@@ -66,7 +172,8 @@ export async function buildPiTools(options: PiToolsOptions): Promise<PiToolsBund
       description: "Return complexity, churn, and recency for prioritization; never treat it as a finding.",
       parameters: Type.Object({ files: Type.Array(Type.String()) }),
       async execute(_id, params) {
-        return json(await context({ repo, files: params.files }));
+        const files = await Promise.all(params.files.map(async (file) => relative(repo, await jailedPath(repo, file))));
+        return json(await context({ repo, files }));
       },
     }),
     defineTool({
@@ -79,7 +186,10 @@ export async function buildPiTools(options: PiToolsOptions): Promise<PiToolsBund
         paths: Type.Optional(Type.Array(Type.String())),
       }),
       async execute(_id, params) {
-        return json(await astSearch({ repo, ...params }));
+        const paths = params.paths
+          ? await Promise.all(params.paths.map(async (path) => relative(repo, await jailedPath(repo, path))))
+          : undefined;
+        return json(await astSearch({ repo, pattern: params.pattern, lang: params.lang, paths }));
       },
     }),
     defineTool({
@@ -88,36 +198,7 @@ export async function buildPiTools(options: PiToolsOptions): Promise<PiToolsBund
       description: "List the reviewed repository's stored finding verdicts and human-taught conventions.",
       parameters: Type.Object({}),
       async execute() {
-        return json(await memoryList({ repo }));
-      },
-    }),
-    defineTool({
-      name: "leveret_remember",
-      label: "Leveret remember",
-      description: "Persist a priced-noise or false-positive verdict with an auditable reason.",
-      parameters: Type.Object({
-        fp: Type.String(),
-        grade: Type.Union([Type.Literal("priced-noise"), Type.Literal("false-positive")]),
-        reason: Type.String(),
-        author: Type.Optional(Type.String()),
-        anchorFile: Type.Optional(Type.String()),
-        anchorLine: Type.Optional(Type.Number({ minimum: 1 })),
-      }),
-      async execute(_id, params) {
-        return json(await remember({ repo, ...params }));
-      },
-    }),
-    defineTool({
-      name: "leveret_learn",
-      label: "Leveret learn",
-      description: "Persist a human-authored repository convention. Never invent a human ruling.",
-      parameters: Type.Object({
-        text: Type.String(),
-        author: Type.String(),
-        scope: Type.Optional(Type.Array(Type.String())),
-      }),
-      async execute(_id, params) {
-        return json(await learn({ repo, ...params }));
+        return json(await memoryList({ repo: options.memoryRepo }));
       },
     }),
   ];
@@ -196,7 +277,7 @@ export async function buildPiTools(options: PiToolsOptions): Promise<PiToolsBund
   }
 
   return {
-    tools,
+    tools: tools.map(annotateEvidence),
     capabilities: {
       graph: options.graphLive,
       lsp: Boolean(options.serena?.tools.length),

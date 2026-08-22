@@ -140,6 +140,9 @@ export async function scan(opts: {
   files?: string[];
   engines?: string[];
   profilePath?: string;
+  memoryRepo?: string;
+  /** custom commands are trusted only in an explicitly controlled invocation */
+  allowCustomEngines?: boolean;
   /** with a base: drop findings already present at the base tree (default true) */
   delta?: boolean;
 }): Promise<ScanResult> {
@@ -150,7 +153,7 @@ export async function scan(opts: {
   const profile = await loadProfile(
     opts.profilePath ? resolve(opts.profilePath) : join(opts.repo, ".leveret.yml"),
   );
-  const custom: Engine[] = profile.custom.map((def) => ({
+  const custom: Engine[] = (opts.allowCustomEngines === false ? [] : profile.custom).map((def) => ({
     id: def.id,
     bin: def.command[0]!,
     select: (ctx) => ctx.files.filter((f) => def.files.some((g) => matchesGlob(f, g))),
@@ -218,10 +221,11 @@ export async function scan(opts: {
   }
 
   const { kept: afterProfile, suppressed: byProfile } = filterFindings(profile, findings);
-  const { kept, suppressed: byMemory } = await applyMemory(opts.repo, afterProfile);
+  const memoryRepo = opts.memoryRepo ?? opts.repo;
+  const { kept, suppressed: byMemory } = await applyMemory(memoryRepo, afterProfile, opts.repo);
   // reminders pass the same profile + memory suppression layers as findings
   const { kept: remindersAfterProfile } = filterFindings(profile, reminderCandidates);
-  const { kept: reminders } = await applyMemory(opts.repo, remindersAfterProfile);
+  const { kept: reminders } = await applyMemory(memoryRepo, remindersAfterProfile, opts.repo);
   reminders.sort((a, b) => a.file.localeCompare(b.file) || a.line - b.line);
   const suppressed = [...byProfile, ...byMemory].sort((a, b) => a.rule.localeCompare(b.rule));
   kept.sort((a, b) => a.file.localeCompare(b.file) || a.line - b.line);

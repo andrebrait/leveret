@@ -25,6 +25,7 @@ import {
 } from "./manifest.js";
 import { ackMessage, doneMessage, failMessage, renderInline, renderWalkthrough, skipMessage, type Tier, type VerifyOutput } from "./render.js";
 import { makeLogger } from "./log.js";
+import { materializeTrustedReviewState, type TrustedReviewState } from "../trusted-state.js";
 import { preBodyReject, readCappedBody, routeEvent, verifySignature, type Job } from "./webhook.js";
 
 // The App layer: GitHub plumbing only. It holds the App key and webhook secret —
@@ -39,6 +40,7 @@ import { preBodyReject, readCappedBody, routeEvent, verifySignature, type Job } 
 const exec = promisify(execFile);
 
 const DATA_DIR = process.env.LEVERET_DATA ?? join(homedir(), ".leveret-app");
+const APP_CHILD_TIMEOUT_MS = 15 * 60_000;
 
 /** deterministic-only fallback: engine findings become the report directly */
 function reportFromScan(result: ScanResult): VerifyOutput {
@@ -75,14 +77,16 @@ async function reviewJob(job: Extract<Job, { kind: "review" }>, creds: AppCreden
   const app = job.installationId ? makeApp({ appId: creds.appId, privateKey: creds.privateKey }) : null;
   let ackId: number | undefined;
   const work = await mkdtemp(join(tmpdir(), "leveret-app-"));
+  let trusted: TrustedReviewState | undefined;
   try {
-    await exec("git", ["clone", "--quiet", job.cloneUrl, work]);
-    await exec("git", ["fetch", "--quiet", "origin", `pull/${job.pr}/head`], { cwd: work });
-    await exec("git", ["checkout", "--quiet", job.headSha], { cwd: work });
+    await exec("git", ["clone", "--quiet", job.cloneUrl, work], { timeout: APP_CHILD_TIMEOUT_MS });
+    await exec("git", ["fetch", "--quiet", "origin", `pull/${job.pr}/head`], { cwd: work, timeout: APP_CHILD_TIMEOUT_MS });
+    await exec("git", ["checkout", "--quiet", job.headSha], { cwd: work, timeout: APP_CHILD_TIMEOUT_MS });
     const base = `origin/${job.baseRef}`;
+    trusted = await materializeTrustedReviewState(work, base);
 
     // the repo's config may ask Leveret to stand down — say so once, then leave
-    const profile = await loadProfile(join(work, ".leveret.yml"));
+    const profile = await loadProfile(trusted.profilePath);
     let skipReason: string | null = null;
     if (!profile.review.enabled) skipReason = "`review.enabled` is false in `.leveret.yml`";
     else if (profile.review.skipTitle && new RegExp(profile.review.skipTitle).test(job.title)) {
@@ -107,7 +111,13 @@ async function reviewJob(job: Extract<Job, { kind: "review" }>, creds: AppCreden
     // the graph is derived and always buildable — structure is queried, not grepped)
     const graph = await ensureGraph(work);
     if (!graph.ok) log.warn("codegraph unavailable", { detail: graph.detail });
-    const result = await scan({ repo: work, base });
+    const result = await scan({
+      repo: work,
+      base,
+      profilePath: trusted.profilePath,
+      memoryRepo: trusted.root,
+      allowCustomEngines: false,
+    });
 
     // incremental re-review: hand the runner the bot's own unresolved threads
     let prior: PriorFinding[] = [];
@@ -128,9 +138,14 @@ async function reviewJob(job: Extract<Job, { kind: "review" }>, creds: AppCreden
       const leadsPath = join(work, ".leveret-leads.json");
       await writeFile(leadsPath, JSON.stringify(result, null, 1));
       const [cmd, ...args] = process.env.LEVERET_RUNNER.split(" ") as [string, ...string[]];
+      const runnerTimeout = Number(process.env.LEVERET_RUNNER_TIMEOUT_MS ?? 65 * 60_000);
+      if (!Number.isFinite(runnerTimeout) || runnerTimeout <= 0) {
+        throw new Error("LEVERET_RUNNER_TIMEOUT_MS must be a positive number");
+      }
       const r = await exec(cmd, args, {
         cwd: work,
         maxBuffer: 64 * 1024 * 1024,
+        timeout: runnerTimeout,
         env: {
           ...process.env,
           LEVERET_REPO: work,
@@ -191,6 +206,7 @@ async function reviewJob(job: Extract<Job, { kind: "review" }>, creds: AppCreden
     }
     throw err;
   } finally {
+    await trusted?.close().catch(() => {});
     await rm(work, { recursive: true, force: true }).catch(() => {});
   }
 }

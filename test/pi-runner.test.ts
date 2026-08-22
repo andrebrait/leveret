@@ -1,4 +1,4 @@
-import { ModelRuntime } from "@earendil-works/pi-coding-agent";
+import { createAgentSession, ModelRuntime, SessionManager, SettingsManager } from "@earendil-works/pi-coding-agent";
 import { describe, expect, it } from "vitest";
 import { run } from "../src/exec.js";
 import { prefetchSerena } from "../src/runner/prefetch-serena.js";
@@ -8,16 +8,29 @@ import {
   parseAssistantJson,
   piRuntimeConfig,
   toolMetricsSummary,
+  withDeadline,
 } from "../src/runner/pi.js";
 import {
   buildSerenaArgs,
+  createSerenaRuntimeHome,
+  createSerenaShadowProject,
   prepareSerenaProject,
+  prefetchEnvironment,
   safeToolEnvironment,
   serenaBundleProblem,
   serenaPrefetchFixtures,
   serenaProjectConfigProblem,
 } from "../src/runner/serena.js";
 import { buildPiTools } from "../src/runner/pi-tools.js";
+
+const toolOptions = (repo: string, sandboxed = false) => ({
+  repo,
+  base: "HEAD",
+  profilePath: `${repo}/.trusted-profile.yml`,
+  memoryRepo: repo,
+  graphLive: false,
+  sandboxed,
+});
 
 describe("Pi runtime isolation", () => {
   it("ships Pi as the standard runner while retaining the OMP rollback binary", async () => {
@@ -56,19 +69,49 @@ describe("Pi runtime isolation", () => {
   });
 
   it("registers no mutation or unrestricted shell tools", async () => {
-    const tools = await buildPiTools({ repo: "/tmp/repo", graphLive: false, sandboxed: false });
+    const tools = await buildPiTools(toolOptions("/tmp/repo"));
     const names = tools.tools.map((tool) => tool.name);
     expect(names).toContain("leveret_scan");
     expect(names).toContain("leveret_ast_search");
+    expect(names).toContain("leveret_read");
+    expect(names).not.toContain("read");
+    expect(names).not.toContain("grep");
+    expect(names).not.toContain("find");
+    expect(names).not.toContain("ls");
     expect(names).not.toContain("bash");
     expect(names).not.toContain("edit");
     expect(names).not.toContain("write");
     expect(names).not.toContain("leveret_probe");
+    expect(names).not.toContain("leveret_remember");
+    expect(names).not.toContain("leveret_learn");
     await tools.close();
   });
 
+  it("jails direct reads and symlinks to the reviewed checkout", async () => {
+    const { mkdtempSync, rmSync, symlinkSync, writeFileSync } = await import("node:fs");
+    const { tmpdir } = await import("node:os");
+    const { join } = await import("node:path");
+    const repo = mkdtempSync(join(tmpdir(), "leveret-jailed-read-"));
+    writeFileSync(join(repo, "inside.txt"), "safe\n");
+    symlinkSync("/etc/hosts", join(repo, "escape.txt"));
+    const bundle = await buildPiTools(toolOptions(repo));
+    const read = bundle.tools.find((tool) => tool.name === "leveret_read")!;
+    const scan = bundle.tools.find((tool) => tool.name === "leveret_scan")!;
+    try {
+      await expect(read.execute("r1", { path: "/etc/hosts" }, undefined, undefined, {} as never)).rejects.toThrow(/relative/);
+      await expect(read.execute("r2", { path: "escape.txt" }, undefined, undefined, {} as never)).rejects.toThrow(/escapes/);
+      await expect(scan.execute("s1", { files: ["/etc/hosts"] }, undefined, undefined, {} as never)).rejects.toThrow(/relative/);
+      await expect(scan.execute("s2", { engines: ["checkout-engine"] }, undefined, undefined, {} as never)).rejects.toThrow(/built-in/);
+      const result = await read.execute("r3", { path: "inside.txt" }, undefined, undefined, {} as never);
+      expect(result.content[1]).toMatchObject({ type: "text", text: "1: safe\n2: " });
+    } finally {
+      await bundle.close();
+      rmSync(repo, { recursive: true, force: true });
+    }
+  });
+
   it("only exposes probes when the caller proves sandboxing", async () => {
-    const tools = await buildPiTools({ repo: "/tmp/repo", graphLive: false, sandboxed: true });
+    const tools = await buildPiTools(toolOptions("/tmp/repo", true));
     expect(tools.tools.map((tool) => tool.name)).toContain("leveret_probe");
     await tools.close();
   });
@@ -88,6 +131,44 @@ describe("Pi runtime isolation", () => {
     expect(prompt).toContain("codegraph_explore");
     expect(prompt).not.toContain("lsp_references");
     expect(prompt).toMatch(/read-only/i);
+  });
+
+  it("does not discover hostile checkout prompts, extensions, MCP, or executables", async () => {
+    const { mkdirSync, mkdtempSync, rmSync, writeFileSync } = await import("node:fs");
+    const { tmpdir } = await import("node:os");
+    const { join } = await import("node:path");
+    const repo = mkdtempSync(join(tmpdir(), "leveret-hostile-pi-"));
+    mkdirSync(join(repo, ".pi", "extensions"), { recursive: true });
+    mkdirSync(join(repo, "node_modules", ".bin"), { recursive: true });
+    writeFileSync(join(repo, ".pi", "SYSTEM.md"), "HOSTILE_SYSTEM_PROMPT\n");
+    writeFileSync(join(repo, ".pi", "settings.json"), '{"defaultProjectTrust":"always"}\n');
+    writeFileSync(join(repo, ".pi", "extensions", "hostile.ts"), "throw new Error('HOSTILE_EXTENSION')\n");
+    writeFileSync(join(repo, "AGENTS.md"), "HOSTILE_CONTEXT\n");
+    writeFileSync(join(repo, ".mcp.json"), '{"mcpServers":{"hostile":{"command":"false"}}}\n');
+    writeFileSync(join(repo, "node_modules", ".bin", "intelephense"), "HOSTILE_EXECUTABLE\n");
+    const bundle = await buildPiTools(toolOptions(repo));
+    const runtime = await ModelRuntime.create({ allowModelNetwork: false, refreshOnCreate: false, modelsPath: null });
+    const model = runtime.getModel("openai", "gpt-5.6-sol")!;
+    const prompt = buildPiSystemPrompt(bundle.tools.map((tool) => tool.name));
+    const session = await createAgentSession({
+      cwd: repo,
+      modelRuntime: runtime,
+      model,
+      customTools: bundle.tools,
+      tools: bundle.tools.map((tool) => tool.name),
+      resourceLoader: buildPiResourceLoader(prompt),
+      sessionManager: SessionManager.inMemory(repo),
+      settingsManager: SettingsManager.inMemory({ defaultProjectTrust: "never" }, { projectTrusted: false }),
+    });
+    try {
+      expect(session.session.systemPrompt).toBe(`${prompt}\nCurrent working directory: ${repo}\n`);
+      expect(session.session.systemPrompt).not.toMatch(/HOSTILE_/);
+      expect(session.session.getActiveToolNames().sort()).toEqual(bundle.tools.map((tool) => tool.name).sort());
+    } finally {
+      session.session.dispose();
+      await bundle.close();
+      rmSync(repo, { recursive: true, force: true });
+    }
   });
 
   it("keeps provider and GitHub credentials out of child tools", async () => {
@@ -123,14 +204,22 @@ describe("Pi result and metrics parsing", () => {
 
   it("summarizes phase-attributed tool events", () => {
     const summary = toolMetricsSummary([
-      { phase: "review", toolCallId: "1", toolName: "codegraph_explore", startedAt: 10, endedAt: 30, isError: false },
-      { phase: "review", toolCallId: "2", toolName: "codegraph_explore", startedAt: 40, endedAt: 55, isError: true },
-      { phase: "verify", toolCallId: "3", toolName: "lsp_references", startedAt: 60, endedAt: 70, isError: false },
+      { phase: "review", toolCallId: "1", toolName: "codegraph_explore", startedAt: 10, endedAt: 30, duration_ms: 20, isError: false, outcome: "success", input_bytes: 5, output_bytes: 8, output_tokens_estimate: 2, args_sha256: "a", server: "codegraph", cache: "cold-index" },
+      { phase: "review", toolCallId: "2", toolName: "codegraph_explore", startedAt: 40, endedAt: 55, duration_ms: 15, isError: true, outcome: "error", input_bytes: 5, output_bytes: 8, output_tokens_estimate: 2, args_sha256: "b", server: "codegraph", cache: "cold-index" },
+      { phase: "verify", toolCallId: "3", toolName: "lsp_references", startedAt: 60, endedAt: 70, duration_ms: 10, isError: false, outcome: "success", input_bytes: 5, output_bytes: 8, output_tokens_estimate: 2, args_sha256: "c", server: "serena", cache: "staged-cold" },
     ]);
     expect(summary).toEqual({
       review: { codegraph_explore: { calls: 2, errors: 1, duration_ms: 35 } },
       verify: { lsp_references: { calls: 1, errors: 0, duration_ms: 10 } },
     });
+  });
+
+  it("reports the deadline even when the abort hook wedges", async () => {
+    const started = Date.now();
+    await expect(
+      withDeadline(new Promise<never>(() => {}), 40, () => new Promise<void>(() => {})),
+    ).rejects.toThrow(/exceeded/);
+    expect(Date.now() - started).toBeLessThan(1000);
   });
 });
 
@@ -164,6 +253,18 @@ describe("Serena headless and offline staging", () => {
     });
     expect(env.OPENAI_API_KEY).toBeUndefined();
     expect(env.GITHUB_TOKEN).toBeUndefined();
+    expect(env.UV_OFFLINE).toBe("1");
+
+    const prefetch = prefetchEnvironment({
+      PATH: "/usr/bin",
+      SERENA_HOME: "/opt/serena",
+      HTTPS_PROXY: "http://proxy.test",
+      OPENAI_API_KEY: "secret",
+    });
+    expect(prefetch.HTTPS_PROXY).toBe("http://proxy.test");
+    expect(prefetch.UV_OFFLINE).toBeUndefined();
+    expect(prefetch.npm_config_offline).toBeUndefined();
+    expect(prefetch.OPENAI_API_KEY).toBeUndefined();
   });
 
   it("defines a small explicit fixture set for build-time prefetch", () => {
@@ -201,7 +302,7 @@ describe("Serena headless and offline staging", () => {
   });
 
   it("generates read-only Serena config only for staged languages present in the checkout", async () => {
-    const { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } = await import("node:fs");
+    const { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } = await import("node:fs");
     const { tmpdir } = await import("node:os");
     const { join } = await import("node:path");
     const root = mkdtempSync(join(tmpdir(), "leveret-serena-project-"));
@@ -216,12 +317,16 @@ describe("Serena headless and offline staging", () => {
     writeFileSync(join(repo, "lib.rs"), "pub fn value() {}\n");
     writeFileSync(join(repo, "node_modules", "ignored.py"), "value = 1\n");
     try {
-      expect(await prepareSerenaProject(repo, home)).toEqual(["php", "rust"]);
-      const config = readFileSync(join(repo, ".serena", "project.yml"), "utf8");
+      const shadow = await createSerenaShadowProject(repo);
+      expect(await prepareSerenaProject(repo, shadow, home)).toEqual(["php", "rust"]);
+      expect(lstatSync(join(shadow, "plugin.inc")).isSymbolicLink()).toBe(true);
+      expect(existsSync(join(repo, ".serena"))).toBe(false);
+      const config = readFileSync(join(shadow, ".serena", "project.yml"), "utf8");
       expect(config).toContain("read_only: true");
       expect(config).toContain('file_filter:');
       expect(config).toContain('  - .inc');
       expect(config).not.toContain("python");
+      rmSync(shadow, { recursive: true, force: true });
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
@@ -245,6 +350,26 @@ describe("Serena headless and offline staging", () => {
       expect(config).toMatch(/projects:\s*\[\]/);
     } finally {
       rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("keeps mutable Serena runtime state outside the staged bundle", async () => {
+    const { lstatSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } = await import("node:fs");
+    const { tmpdir } = await import("node:os");
+    const { join } = await import("node:path");
+    const staged = mkdtempSync(join(tmpdir(), "leveret-serena-stage-"));
+    mkdirSync(join(staged, "language_servers"));
+    writeFileSync(join(staged, "serena_config.yml"), "projects:\n  - /stale/project\nls_specific_settings:\n  php:\n    ls_path: /opt/php-lsp\n");
+    const runtime = await createSerenaRuntimeHome(staged);
+    try {
+      expect(lstatSync(join(runtime, "language_servers")).isSymbolicLink()).toBe(true);
+      const config = readFileSync(join(runtime, "serena_config.yml"), "utf8");
+      expect(config).toMatch(/projects:\s*\[\]/);
+      expect(config).toContain("ls_path: /opt/php-lsp");
+      expect(readFileSync(join(staged, "serena_config.yml"), "utf8")).toContain("/stale/project");
+    } finally {
+      rmSync(runtime, { recursive: true, force: true });
+      rmSync(staged, { recursive: true, force: true });
     }
   });
 });

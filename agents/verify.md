@@ -31,10 +31,11 @@ doesn't require it" — the human taught it, so it stands.
    - **priced-noise** — technically true, but fixing it buys nothing here (repo
      convention, deliberate ceiling, inert path). Requires the pricing rationale.
    - **false-positive** — the claim is wrong. Requires the refuting fact.
-5. For every `priced-noise` and `false-positive` verdict, persist it with
-   `leveret.remember` (`{repo: "{{REPO}}", fp, grade, reason}`; anchor instance
-   verdicts with `anchorFile`/`anchorLine`) so the class never re-litigates. Never
-   store `actionable`.
+5. Where the harness exposes `leveret.remember` backed by a durable trusted store,
+   persist every `priced-noise` and `false-positive` verdict (`{repo: "{{REPO}}",
+   fp, grade, reason}`; anchor instance verdicts with `anchorFile`/`anchorLine`) so
+   the class never re-litigates. Otherwise grade it without persistence. Never store
+   `actionable`.
 
 A claim you can neither refute nor ground is graded `"dropped"` in `verdicts` (with
 the reason it was unverifiable) and excluded from the report. **Never persist a
@@ -70,7 +71,8 @@ Return only JSON; no prose around it:
       "scope": "in-diff",
       "correlation": "only for out-of-diff items: why this connects to the change",
       "evidence": "command + output, or cited current code",
-      "suggested_fix": "optional, concrete"
+      "suggested_fix": "optional, concrete",
+      "evidence_ids": ["tool-call evidence_id values supporting this finding"]
     }
   ],
   "verdicts": [

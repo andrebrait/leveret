@@ -90,4 +90,11 @@ describe("agent contracts", () => {
     // tier is review judgment, not engine severity — both must exist distinctly
     expect(text).toContain('"severity"');
   });
+
+  it("attributes tool-grounded concerns and findings to evidence ids", async () => {
+    const review = await loadContract("review", { repo: "r", base: "b" });
+    const verify = await loadContract("verify", { repo: "r", base: "b" });
+    expect(review).toContain('"evidence_ids"');
+    expect(verify).toContain('"evidence_ids"');
+  });
 });

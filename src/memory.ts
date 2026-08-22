@@ -190,6 +190,7 @@ function fpMatches(fp: string, f: Finding): boolean {
 export async function applyMemory(
   repo: string,
   findings: Finding[],
+  codeRepo = repo,
 ): Promise<{ kept: Finding[]; suppressed: { rule: string; count: number; reason: string }[] }> {
   const entries = await memoryList({ repo });
   if (entries.length === 0) return { kept: findings, suppressed: [] };
@@ -203,7 +204,7 @@ export async function applyMemory(
       if (e.kind === "convention" || !e.fp) continue;
       if (!fpMatches(e.fp, f)) continue;
       if (e.anchor) {
-        const text = await lineAt(repo, f.file, f.line);
+        const text = await lineAt(codeRepo, f.file, f.line);
         // Changed or vanished line: the pricing anchored to code that no longer
         // exists — the memory is dead for this finding, fall through to layer 3.
         if (text === null || hashLine(text) !== e.anchor) continue;

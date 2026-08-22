@@ -20,10 +20,10 @@ export type ContractName = keyof typeof CONTRACTS;
 
 export async function loadContract(
   name: ContractName,
-  args: { repo: string; base: string },
+  args: { repo: string; base: string; rulingsRepo?: string },
 ): Promise<string> {
   const raw = readFileSync(join(AGENTS_DIR, CONTRACTS[name]), "utf8");
-  const rulings = await rulingsText(args.repo);
+  const rulings = await rulingsText(args.rulingsRepo ?? args.repo);
   const text = raw
     .replaceAll("{{REPO}}", args.repo)
     .replaceAll("{{BASE}}", args.base)

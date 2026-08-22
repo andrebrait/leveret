@@ -47,6 +47,8 @@ const SAFE_ENV_KEYS = [
   "PATHEXT",
 ] as const;
 
+const DEFAULT_TIMEOUT_MS = 15 * 60_000;
+
 /** Environment for untrusted checkout tools: runtime basics, never provider/GitHub credentials. */
 export function safeChildEnvironment(source: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {
   const env: NodeJS.ProcessEnv = {};
@@ -59,7 +61,7 @@ export function safeChildEnvironment(source: NodeJS.ProcessEnv = process.env): N
 export function run(cmd: string, args: string[], cwd: string, opts?: RunOpts): Promise<ExecResult> {
   return new Promise((resolve) => {
     const env = opts?.env ?? (process.env.LEVERET_SANITIZE_CHILD_ENV === "1" ? safeChildEnvironment() : undefined);
-    execFile(cmd, args, { cwd, env, maxBuffer: opts?.maxBuffer ?? 64 * 1024 * 1024, timeout: opts?.timeoutMs ?? 0 }, (err, stdout, stderr) => {
+    execFile(cmd, args, { cwd, env, maxBuffer: opts?.maxBuffer ?? 64 * 1024 * 1024, timeout: opts?.timeoutMs ?? DEFAULT_TIMEOUT_MS }, (err, stdout, stderr) => {
       let code = 0;
       let signal: string | undefined;
       if (err) {
