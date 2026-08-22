@@ -73,9 +73,19 @@ describe("publicHookProblem", () => {
 
   it("replaces the form with the fix instead of letting GitHub reject the manifest", () => {
     const html = renderSetupPage("http://127.0.0.1:8091", "http://127.0.0.1:8091", "st");
-    expect(html).toContain("127.0.0.1");
-    expect(html).toContain("LEVERET_PUBLIC_URL");
+    expect(html).toContain('<h2 class="center">Unreachable server</h2>');
+    expect(html).toContain("<code>LEVERET_PUBLIC_URL</code> is not configured");
+    expect(html).toContain("GitHub's Webhooks require a publicly-accessible endpoint");
+    // "documentation" is the link, not a bare URL dumped in the sentence
+    expect(html).toContain('<a href="https://github.com/leveret-dev/leveret/blob/main/docs/app.md#getting-started">documentation</a>');
+    expect(html).toContain("tailscale funnel");
     expect(html).not.toContain('name="manifest"');
+  });
+
+  it("does not claim the variable is unset when it is set to an unreachable address", () => {
+    const html = renderSetupPage("http://10.0.0.5:8090", "http://127.0.0.1:8090", "st", undefined, true);
+    expect(html).toContain("10.0.0.5");
+    expect(html).not.toContain("is not configured");
   });
 });
 

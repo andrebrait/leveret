@@ -250,7 +250,7 @@ export async function main(): Promise<void> {
       const state = randomBytes(16).toString("hex");
       const org = url.searchParams.get("org") ?? undefined;
       setupStates.set(state, org);
-      html(res, 200, renderSetupPage(hookUrl(req, port), redirectBase(req, port), state, org));
+      html(res, 200, renderSetupPage(hookUrl(req, port), redirectBase(req, port), state, org, Boolean(process.env.LEVERET_PUBLIC_URL)));
       return;
     }
 
