@@ -83,7 +83,9 @@ export function page(title: string, body: string): string {
  button:hover { filter: brightness(1.08); }
  .ghost { display: inline-block; margin-top: 1.25rem; padding: .45rem .9rem; border-radius: .45rem;
         border: 1px solid ${MARK}33; color: ${MARK}; text-decoration: none; font-size: .9rem; }
- ol { padding-left: 1.25rem; margin: 0; } li { margin: .75rem 0; }
+ ol, ul { padding-left: 1.25rem; margin: .5rem 0 0; } li { margin: .4rem 0; }
+ h2 { font-size: 1.25rem; font-weight: 600; margin: 0 0 1rem; }
+ .note { font-size: .92rem; color: ${MARK}b3; } .note p { margin: 0; }
  .err { color: ${MINUS}; }
 </style></head>
 <body><main>
@@ -96,22 +98,19 @@ export function page(title: string, body: string): string {
 </main></body></html>`;
 }
 
-/** How the credential directory is NAMED on a page: /setup answers to whatever
- * reaches the tunnel, so the absolute path — which carries the account name —
- * stays in the local startup log, never in a response. */
-export function dataDirLabel(env: Record<string, string | undefined>): string {
-  return env.LEVERET_DATA ? "$LEVERET_DATA" : "~/.leveret-app";
-}
-
 /** Shown at /setup once credentials exist: it asks the reader to delete something,
- * so it has to say what and where. */
+ * so it names the files outright, full path included (owner ruling 2026-08-22). */
 export function renderConfiguredPage(dataDir: string): string {
   return page(
     "Leveret",
-    `<p class="card">Already configured — this server has its GitHub App. To run setup
-  again, delete <code>app-credentials.json</code> and <code>app.pem</code> from the
-  data directory (<code>${dataDir}</code>; the server prints the full path in its
-  startup log) and reload this page.</p>`,
+    `<h2>GitHub App already configured</h2>
+  <div class="card note">
+    <p>To reset it, delete these files and reload:</p>
+    <ul>
+      <li><code>${dataDir}/app-credentials.json</code></li>
+      <li><code>${dataDir}/app.pem</code></li>
+    </ul>
+  </div>`,
   );
 }
 

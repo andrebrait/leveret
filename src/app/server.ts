@@ -14,7 +14,6 @@ import { botLogin, fetchReviewThreads, makeApp, postComment, postReview, replyIn
 import { parsePriorThreads, resolvedReply, type PriorFinding } from "./incremental.js";
 import {
   convertManifestCode,
-  dataDirLabel,
   loadCredentials,
   page,
   renderCallbackPage,
@@ -245,7 +244,7 @@ export async function main(): Promise<void> {
 
     if (req.method === "GET" && url.pathname === "/setup") {
       if (creds) {
-        html(res, 200, renderConfiguredPage(dataDirLabel(process.env)));
+        html(res, 200, renderConfiguredPage(DATA_DIR));
         return;
       }
       const state = randomBytes(16).toString("hex");
