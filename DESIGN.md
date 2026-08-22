@@ -249,8 +249,7 @@ the trade that mode 2 already is.
 Prompt contracts alone do not standardize a reviewer: the harness (tool
 orchestration, system framing, output discipline) shapes the review as much as the
 model. The same ruling as the code graph applies — **the harness is part of the
-reviewer** — but OMP was an experiment, not a reference feature set. The standardized
-client is now `leveret-runner-pi`, built on upstream Pi package
+reviewer**. The standardized client is `leveret-runner-pi`, built on upstream Pi package
 `@earendil-works/pi-coding-agent@0.84.2` (exact tarball integrity in
 `package-lock.json`). Pi owns providers,
 OAuth, model calls and the agent loop. Leveret owns the system prompt, tools,
@@ -289,17 +288,15 @@ The required provider paths are OpenAI and Anthropic by API key, their personal
 subscription OAuth paths, and local OpenAI-compatible endpoints. The caller chooses
 provider, model, thinking and per-phase deadline; no raw harness passthrough exists.
 Every walkthrough records Pi/model, prompt hash, live capabilities, and phase tool
-metrics. `leveret-runner-omp` remains a compatibility binary, while
-`LEVERET_RUNNER` remains the bring-your-own-harness escape hatch.
+metrics. `LEVERET_RUNNER` remains the bring-your-own-harness escape hatch.
 
 The interactive MCP path is deliberately not standardized: a human is present there
 to judge their own client and tool configuration. Autonomous App/Actions reviews use
 the Pi client so comparable reviews have one known prompt and tool surface.
 
-Pi is not required to reproduce OMP's findings, call order, or incidental feature
-set. OMP never became a reference implementation. The initial client is accepted on
-Leveret's provider, isolation, grounding, observability and output goals; prompt and
-tool-routing quality are expected to be tuned from subsequent organic reviews.
+Pi is evaluated on Leveret's provider, isolation, grounding, observability, and
+output goals, not the findings or incidental features of an earlier harness. Prompt
+and tool-routing quality are expected to be tuned from subsequent organic reviews.
 
 ## Agent pipeline
 
