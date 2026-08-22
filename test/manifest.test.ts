@@ -51,6 +51,8 @@ describe("page", () => {
     expect(html).toContain("#1d1728"); // logo plate
     expect(html).toContain("#a7ec21"); // logo plus-eye, the accent
     expect(html).toContain("/assets/logo.svg");
+    // the mark is the way home
+    expect(html).toContain('<a href="https://leveret-dev.io"><img src="/assets/logo.svg"');
     expect(html).toContain("<title>Some title</title>");
     expect(html).toContain("<p>body</p>");
   });

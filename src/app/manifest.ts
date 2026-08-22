@@ -48,6 +48,7 @@ export function buildManifest(hookUrl: string, redirectBase: string, name = bran
 // The setup surfaces wear the logo's own palette: the plate, the white mark, and
 // the two eyes — a red minus and a green plus — so the pages, the avatar and the
 // review comments all read as one product.
+const HOME_URL = "https://leveret-dev.io";
 const DOCS_URL = "https://github.com/leveret-dev/leveret/blob/main/docs/app.md#getting-started";
 
 const PLATE = "#1d1728";
@@ -68,7 +69,8 @@ export function page(title: string, body: string): string {
         font: 16px/1.6 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; }
  main { max-width: 40rem; margin: 0 auto; }
  header { text-align: center; margin-bottom: 2.5rem; }
- header img { width: 7rem; border-radius: 17%; }
+ header img { width: 7rem; border-radius: 17%; display: block; }
+ header a { display: inline-block; line-height: 0; }
  h1 { font-size: 1.9rem; font-weight: 650; letter-spacing: -.02em; margin: 1rem 0 .35rem; }
  .tag { color: ${MARK}99; margin: 0; }
  a { color: ${PLUS}; }
@@ -96,7 +98,7 @@ export function page(title: string, body: string): string {
 </style></head>
 <body><main>
   <header>
-    <img src="/assets/logo.svg" alt="">
+    <a href="${HOME_URL}"><img src="/assets/logo.svg" alt="Leveret"></a>
     <h1>Leveret</h1>
     <p class="tag">Self-hosted code review. Nothing about your code leaves this machine.</p>
   </header>
