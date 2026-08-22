@@ -16,16 +16,40 @@ export interface SerenaFixture {
 
 const FIXTURES: SerenaFixture[] = [
   { language: "typescript", files: [{ path: "package.json", content: '{"name":"fixture"}\n' }, { path: "index.ts", content: "export const value = 1;\n" }] },
-  { language: "python", files: [{ path: "pyproject.toml", content: "[project]\nname='fixture'\nversion='0'\n" }, { path: "main.py", content: "value = 1\n" }] },
   { language: "php", files: [{ path: "composer.json", content: '{"name":"leveret/fixture"}\n' }, { path: "index.php", content: "<?php function value(): int { return 1; }\n" }] },
   { language: "bash", files: [{ path: "main.sh", content: "#!/bin/sh\nvalue=1\n" }] },
   { language: "yaml", files: [{ path: "config.yml", content: "value: 1\n" }] },
   { language: "json", files: [{ path: "config.json", content: '{"value":1}\n' }] },
-  { language: "cpp", files: [{ path: "CMakeLists.txt", content: "cmake_minimum_required(VERSION 3.20)\nproject(fixture)\n" }, { path: "main.cpp", content: "int value() { return 1; }\n" }] },
-  { language: "go", files: [{ path: "go.mod", content: "module example.test/fixture\n\ngo 1.24\n" }, { path: "main.go", content: "package fixture\nfunc Value() int { return 1 }\n" }] },
-  { language: "rust", files: [{ path: "Cargo.toml", content: "[package]\nname='fixture'\nversion='0.1.0'\nedition='2024'\n" }, { path: "src/lib.rs", content: "pub fn value() -> i32 { 1 }\n" }] },
-  { language: "java", files: [{ path: "pom.xml", content: "<project><modelVersion>4.0.0</modelVersion><groupId>test</groupId><artifactId>fixture</artifactId><version>1</version></project>\n" }, { path: "src/main/java/Fixture.java", content: "final class Fixture { static int value() { return 1; } }\n" }] },
 ];
+
+const PACKAGED_SERVERS: Record<string, { directory: string; executable: string }> = {
+  typescript: { directory: "TypeScriptLanguageServer", executable: "typescript-language-server" },
+  php: { directory: "Intelephense", executable: "intelephense" },
+  bash: { directory: "BashLanguageServer", executable: "bash-language-server" },
+  yaml: { directory: "YamlLanguageServer", executable: "yaml-language-server" },
+  json: { directory: "JsonLanguageServer", executable: "vscode-json-languageserver" },
+};
+
+export async function packagedLanguageServer(home: string, language: string): Promise<string | null> {
+  const expected = PACKAGED_SERVERS[language];
+  if (!expected) return null;
+  const stack = [join(home, "language_servers", "static", expected.directory)];
+  while (stack.length) {
+    const dir = stack.pop()!;
+    let entries;
+    try {
+      entries = await readdir(dir, { withFileTypes: true });
+    } catch {
+      continue;
+    }
+    for (const entry of entries) {
+      const path = join(dir, entry.name);
+      if (entry.isDirectory()) stack.push(path);
+      else if (entry.name === expected.executable || entry.name === `${expected.executable}.cmd`) return path;
+    }
+  }
+  return null;
+}
 
 export function serenaPrefetchFixtures(): SerenaFixture[] {
   return FIXTURES.map((fixture) => ({ ...fixture, files: fixture.files.map((file) => ({ ...file })) }));
@@ -167,11 +191,25 @@ export async function createSerenaShadowProject(repo: string): Promise<string> {
 }
 
 export async function prepareSerenaProject(repo: string, projectRoot: string, home: string): Promise<string[]> {
-  const manifest = JSON.parse(await readFile(join(home, "leveret-lsp-manifest.json"), "utf8")) as { languages?: unknown };
+  const manifest = JSON.parse(await readFile(join(home, "leveret-lsp-manifest.json"), "utf8")) as { languages?: unknown; ls_paths?: unknown };
   if (!Array.isArray(manifest.languages) || !manifest.languages.every((language) => typeof language === "string")) {
     throw new Error("invalid Leveret LSP manifest");
   }
+  if (!manifest.ls_paths || typeof manifest.ls_paths !== "object") {
+    throw new Error("Leveret LSP manifest has no packaged ls_paths");
+  }
   const languages = await detectedLanguages(repo, new Set(manifest.languages));
+  const lsSettings: Record<string, Record<string, unknown>> = {};
+  for (const language of languages) {
+    const path = (manifest.ls_paths as Record<string, unknown>)[language];
+    if (typeof path !== "string" || !existsSync(path)) {
+      throw new Error(`packaged ${language} LSP is missing: ${String(path)}`);
+    }
+    lsSettings[language] = {
+      ls_path: path,
+      ...(language === "php" ? { file_filter: [".inc"] } : {}),
+    };
+  }
   const projectDir = join(projectRoot, ".serena");
   await mkdir(projectDir);
   await writeFile(
@@ -182,7 +220,7 @@ export async function prepareSerenaProject(repo: string, projectRoot: string, ho
       encoding: "utf-8",
       ignored_paths: [".git/**", "node_modules/**", "vendor/**", "dist/**", "build/**", "target/**", ".venv/**"],
       read_only: true,
-      ...(languages.includes("php") ? { ls_specific_settings: { php: { file_filter: [".inc"] } } } : {}),
+      ls_specific_settings: lsSettings,
     }),
   );
   return languages;
@@ -285,9 +323,11 @@ export async function connectSerena(repo: string, command = "serena", timeoutMs 
             undefined,
             { signal, timeout: 60_000, maxTotalTimeout: 60_000 },
           );
+          const output = textContent(result).replaceAll(shadow, repo);
+          if (result.isError === true) throw new Error(`Serena ${tool.name}: ${output.slice(0, 1000)}`);
           return {
-            content: [{ type: "text" as const, text: textContent(result).replaceAll(shadow, repo) }],
-            details: { server: "serena", tool: tool.name, isError: result.isError === true },
+            content: [{ type: "text" as const, text: output }],
+            details: { server: "serena", tool: tool.name },
           };
         },
       }));

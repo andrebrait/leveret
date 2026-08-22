@@ -250,7 +250,9 @@ Prompt contracts alone do not standardize a reviewer: the harness (tool
 orchestration, system framing, output discipline) shapes the review as much as the
 model. The same ruling as the code graph applies — **the harness is part of the
 reviewer** — but OMP was an experiment, not a reference feature set. The standardized
-client is now `leveret-runner-pi`, built on pinned upstream Pi. Pi owns providers,
+client is now `leveret-runner-pi`, built on upstream Pi package
+`@earendil-works/pi-coding-agent@0.84.2` (exact tarball integrity in
+`package-lock.json`). Pi owns providers,
 OAuth, model calls and the agent loop. Leveret owns the system prompt, tools,
 deadlines, metrics and output contract.
 
@@ -272,6 +274,15 @@ downloads are refused.
 Its dashboard HTTP server, GUI, tray manager and anonymous usage report are disabled.
 The Pi adapter records durable tool metrics because Serena's dashboard-free counters
 otherwise remain process-local.
+The initial fixed-path bundle is intentionally limited to TypeScript/JavaScript, PHP,
+Bash, YAML, and JSON; its manifest records absolute packaged executables. Languages
+that still depend on uvx or a host toolchain are reported unavailable rather than
+being falsely labeled staged.
+
+The autonomous Pi surface can read trusted rulings but cannot promote its own
+verdicts into memory. Its verdicts remain in the durable run artifact; versioned
+repo memory and the authenticated human learn feed remain the write paths. This
+prevents review-target prompt injection from teaching future reviews.
 
 Pi is pinned because its provider catalog and SDK shape are part of the reviewer.
 The required provider paths are OpenAI and Anthropic by API key, their personal

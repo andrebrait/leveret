@@ -140,6 +140,7 @@ export async function scan(opts: {
   files?: string[];
   engines?: string[];
   profilePath?: string;
+  rulesRoot?: string;
   memoryRepo?: string;
   /** custom commands are trusted only in an explicitly controlled invocation */
   allowCustomEngines?: boolean;
@@ -171,7 +172,7 @@ export async function scan(opts: {
     { repo: opts.repo, files, base: opts.base },
     profile,
     wanted,
-    opts.repo,
+    opts.rulesRoot ?? opts.repo,
     reports,
   );
 
@@ -191,7 +192,7 @@ export async function scan(opts: {
         },
         profile,
         wanted,
-        opts.repo,
+        opts.rulesRoot ?? opts.repo,
         baseReports,
       ),
     );

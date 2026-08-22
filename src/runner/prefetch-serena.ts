@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { stringify } from "yaml";
 import { run } from "../exec.js";
-import { prefetchEnvironment, serenaPrefetchFixtures } from "./serena.js";
+import { packagedLanguageServer, prefetchEnvironment, serenaPrefetchFixtures } from "./serena.js";
 
 export interface PrefetchOptions {
   home: string;
@@ -34,6 +34,7 @@ export async function prefetchSerena(options: PrefetchOptions): Promise<void> {
   await writeFile(configPath, stringify(config));
   const root = await mkdtemp(join(tmpdir(), "leveret-serena-prefetch-"));
   const env = prefetchEnvironment({ ...process.env, SERENA_HOME: options.home });
+  const lsPaths: Record<string, string> = {};
   try {
     for (const fixture of selected) {
       const project = join(root, fixture.language);
@@ -64,12 +65,15 @@ export async function prefetchSerena(options: PrefetchOptions): Promise<void> {
       if (result.code !== 0) {
         throw new Error(`Serena ${fixture.language} prefetch rc=${result.code}: ${result.stderr.slice(0, 1000)}`);
       }
+      const packaged = await packagedLanguageServer(options.home, fixture.language);
+      if (!packaged) throw new Error(`Serena ${fixture.language} did not stage a self-contained language server`);
+      lsPaths[fixture.language] = packaged;
     }
     // Fixture registrations are build-time scaffolding, not runtime projects.
     await writeFile(configPath, stringify(config));
     await writeFile(
       join(options.home, "leveret-lsp-manifest.json"),
-      `${JSON.stringify({ languages: selected.map((fixture) => fixture.language), generated_at: new Date().toISOString() }, null, 2)}\n`,
+      `${JSON.stringify({ languages: selected.map((fixture) => fixture.language), ls_paths: lsPaths, generated_at: new Date().toISOString() }, null, 2)}\n`,
     );
   } finally {
     await rm(root, { recursive: true, force: true });

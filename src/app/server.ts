@@ -115,6 +115,7 @@ async function reviewJob(job: Extract<Job, { kind: "review" }>, creds: AppCreden
       repo: work,
       base,
       profilePath: trusted.profilePath,
+      rulesRoot: trusted.root,
       memoryRepo: trusted.root,
       allowCustomEngines: false,
     });
@@ -138,7 +139,9 @@ async function reviewJob(job: Extract<Job, { kind: "review" }>, creds: AppCreden
       const leadsPath = join(work, ".leveret-leads.json");
       await writeFile(leadsPath, JSON.stringify(result, null, 1));
       const [cmd, ...args] = process.env.LEVERET_RUNNER.split(" ") as [string, ...string[]];
-      const runnerTimeout = Number(process.env.LEVERET_RUNNER_TIMEOUT_MS ?? 65 * 60_000);
+      // Default Pi budget: review + verify + one schema-correction phase, each 30m,
+      // plus startup/cleanup slack. Custom runners can override explicitly.
+      const runnerTimeout = Number(process.env.LEVERET_RUNNER_TIMEOUT_MS ?? 100 * 60_000);
       if (!Number.isFinite(runnerTimeout) || runnerTimeout <= 0) {
         throw new Error("LEVERET_RUNNER_TIMEOUT_MS must be a positive number");
       }

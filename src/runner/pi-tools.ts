@@ -61,6 +61,7 @@ export interface PiToolsOptions {
   sandboxed: boolean;
   serena?: SerenaBridge;
   profilePath: string;
+  rulesRoot: string;
   memoryRepo: string;
   base: string;
 }
@@ -161,9 +162,32 @@ export async function buildPiTools(options: PiToolsOptions): Promise<PiToolsBund
           files,
           engines: params.engines,
           profilePath: options.profilePath,
+          rulesRoot: options.rulesRoot,
           memoryRepo: options.memoryRepo,
           allowCustomEngines: false,
         }));
+      },
+    }),
+    defineTool({
+      name: "leveret_diff",
+      label: "Reviewed diff",
+      description: "Return the base-pinned unified diff and changed-file list for this review.",
+      parameters: Type.Object({}),
+      async execute() {
+        const changed = await run("git", ["diff", "--name-only", "-z", `${options.base}...HEAD`], repo, {
+          timeoutMs: 60_000,
+          env: safeChildEnvironment(),
+          maxBuffer: 2 * 1024 * 1024,
+        });
+        const diff = await run("git", ["diff", "--no-ext-diff", "--unified=80", `${options.base}...HEAD`], repo, {
+          timeoutMs: 60_000,
+          env: safeChildEnvironment(),
+          maxBuffer: 16 * 1024 * 1024,
+        });
+        if (changed.code !== 0 || diff.code !== 0) {
+          throw new Error(`git diff failed: ${(changed.stderr || diff.stderr).slice(0, 500)}`);
+        }
+        return text(`changed_files:\n${changed.stdout.split("\0").filter(Boolean).join("\n")}\n\nunified_diff:\n${diff.stdout}`);
       },
     }),
     defineTool({
