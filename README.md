@@ -73,13 +73,15 @@ and posts the review — inline comments plus walkthrough. The App holds only a 
 App key and webhook secret; model credentials live exclusively in the runner. Human
 replies on findings feed `learn`. Getting started + diagram: [docs/app.md](docs/app.md).
 
-**Standardized runner.** `leveret-runner-omp` drives the review/verify contracts
-through a pinned omp.sh harness with fixed purity flags (no skills, extensions,
-rules, sessions, or harness LSP; compaction off). You choose provider, model, and
-effort (`--model` / `--effort` / `--provider` / `--omp-arg`, or the matching
-`LEVERET_RUNNER_*` env vars; defaults `gpt-5.6-sol` at `high`); the effective
-configuration is printed in every walkthrough. A custom `LEVERET_RUNNER` command is
-the escape hatch for bring-your-own-harness setups.
+**Standardized runner.** `leveret-runner-pi` drives the review/verify contracts
+through a pinned [Pi](https://github.com/earendil-works/pi) runtime. Leveret supplies
+the system prompt and an exact read-only toolset; Pi supplies the provider/model
+runtime. Project settings, extensions, skills, prompt templates, context files and
+sessions are not discovered. You choose provider, model, and effort (`--model` /
+`--effort` / `--provider`, or the matching `LEVERET_RUNNER_*` env vars; defaults
+`openai/gpt-5.6-sol` at `high`). Every walkthrough records the effective client,
+model, prompt hash, capabilities, and tool metrics. `leveret-runner-omp` remains a
+compatibility runner, and a custom `LEVERET_RUNNER` remains the escape hatch.
 
 **Interactive (MCP).** Register the server in any MCP-capable client and drive
 reviews yourself — the served `review`/`verify` prompts arrive with your repo's
@@ -101,8 +103,12 @@ MCP tools: `scan`, `ast_search` (structural search via ast-grep), `context`
 The engines and the code graph are capabilities of the reviewer, not the reviewed
 repository: install them beside Leveret. Full belt: `codegraph`, `semgrep`,
 `gitleaks`, `shellcheck`, `ruff`, `actionlint`, `zizmor`, `osv-scanner`, `typos`,
-`jscpd`, `ast-grep`, `lizard`, and optionally `serena` for the LSP surface. A
-missing tool degrades loudly — the walkthrough reports which surfaces were live.
+`jscpd`, `ast-grep`, `lizard`, and a pre-staged Serena LSP bundle for semantic
+navigation. From a clone, build one with
+`node dist/runner/prefetch-serena.js --home /opt/leveret/serena-home` and run with
+the same `SERENA_HOME` (the installed package also exposes
+`leveret-prefetch-serena`). Runtime downloads are refused. A missing tool degrades
+loudly — the walkthrough reports which surfaces were live.
 
 ```sh
 npm test        # integration suite; exercises the real tools

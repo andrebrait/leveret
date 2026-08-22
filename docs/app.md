@@ -6,14 +6,29 @@ explains the moving parts and has the diagram.
 
 ## Getting started
 
-Prerequisites: Node 22+, git, the [reviewer toolbelt](../README.md#the-reviewer-toolbelt),
-and [omp.sh](https://omp.sh) authenticated with your provider.
+Prerequisites: Node 22.19+, git, the [reviewer toolbelt](../README.md#the-reviewer-toolbelt),
+and provider credentials accepted by [Pi](https://github.com/earendil-works/pi).
 
 **1. Build:**
 
 ```sh
 git clone https://github.com/leveret-dev/leveret && cd leveret
 npm install && npm run build
+```
+
+Authenticate once for subscription OAuth, if applicable:
+
+```sh
+npx pi
+# run /login, then exit
+```
+
+Optionally stage the curated Serena LSP bundle during installation. This command
+performs downloads now; reviews refuse runtime LSP downloads:
+
+```sh
+SERENA_HOME=/opt/leveret/serena-home \
+node dist/runner/prefetch-serena.js --home /opt/leveret/serena-home
 ```
 
 **2. Make the machine reachable for webhooks** (pick one):
@@ -40,7 +55,8 @@ cloudflared tunnel --url http://127.0.0.1:8090
 
 ```sh
 LEVERET_PUBLIC_URL=https://YOUR-PUBLIC-URL \
-LEVERET_RUNNER=leveret-runner-omp \
+LEVERET_RUNNER="node $PWD/dist/runner/pi.js" \
+SERENA_HOME=/opt/leveret/serena-home \
 node dist/app/server.js
 ```
 
@@ -68,7 +84,7 @@ walkthrough summary.
 Optional runner tuning (details in [How it works](#how-it-works)):
 
 ```sh
-LEVERET_RUNNER="leveret-runner-omp --model gpt-5.6-sol --effort high"
+LEVERET_RUNNER="node $PWD/dist/runner/pi.js --provider openai --model gpt-5.6-sol --effort high"
 ```
 
 ## How it works
@@ -92,7 +108,7 @@ flowchart TD
         end
         subgraph ag["agents — your model & credentials"]
             direction TB
-            RUN["🤖 leveret-runner-omp"]:::agent
+            RUN["🤖 leveret-runner-pi"]:::agent
             RA["🐇 Review agent<br>five lenses"]:::agent
             VA["⚖️ Verification agent<br>refute or evidence"]:::agent
             RUN --> RA --> VA
@@ -124,12 +140,14 @@ The pieces, top to bottom:
   capability — the reviewed repo needs nothing), and runs the deterministic engines
   with delta scanning against the base: only findings the change introduced
   survive, with everything dropped accounted for.
-- **The runner.** `leveret-runner-omp` drives two agent phases through a pinned
-  omp.sh harness — the review agent (five lenses, cross-file blast radius via the
-  graph) and the verification agent (tries to refute every concern; unverifiable
-  claims are dropped, not published). Your provider credentials live only here;
-  the App layer never sees them. Model, effort, and provider are yours to set —
-  the review's walkthrough records what actually ran.
+- **The runner.** `leveret-runner-pi` drives two agent phases through a pinned Pi
+  runtime — the review agent (five lenses, cross-file blast radius via the graph)
+  and the verification agent (tries to refute every concern; unverifiable claims
+  are dropped). Leveret supplies an explicit system prompt and tool allowlist;
+  project settings, prompts, extensions, skills and context files are never loaded.
+  Your provider credentials live only here; the App layer and child tools never see
+  them. The walkthrough records the client, model, prompt hash, live capabilities,
+  and tool metrics.
 - **The review.** In-diff findings become inline comments grouped by tier;
   out-of-diff findings, reminders, coverage, and the engine table land in the
   walkthrough summary.
@@ -156,27 +174,35 @@ secret — all owned by you, created by the setup flow, never leaving the machin
 LEVERET_APP_ID=12345 \
 LEVERET_PRIVATE_KEY_PATH=/path/to/app.pem \
 LEVERET_WEBHOOK_SECRET=... \
-LEVERET_RUNNER=leveret-runner-omp \
+LEVERET_RUNNER="node $PWD/dist/runner/pi.js" \
+SERENA_HOME=/opt/leveret/serena-home \
 node dist/app/server.js
 ```
 
 ### Runner reference
 
-`leveret-runner-omp` accepts CLI args (or `LEVERET_RUNNER_*` env vars; CLI wins):
+`leveret-runner-pi` accepts CLI args (or `LEVERET_RUNNER_*` env vars; CLI wins):
 
 | flag | env | default |
 | --- | --- | --- |
 | `--model` | `LEVERET_RUNNER_MODEL` | `gpt-5.6-sol` |
 | `--effort` | `LEVERET_RUNNER_EFFORT` | `high` |
-| `--provider` | `LEVERET_RUNNER_PROVIDER` | omp default |
+| `--provider` | `LEVERET_RUNNER_PROVIDER` | `openai` |
 | `--max-time` | `LEVERET_RUNNER_MAX_TIME` | `30m` per phase |
-| `--omp-arg` (repeatable) | `LEVERET_RUNNER_OMP_ARGS` | — |
 
-The purity flags (no skills, extensions, rules, sessions, or harness LSP;
-compaction off) are fixed — they are the standardization. A custom
-`LEVERET_RUNNER` command is the escape hatch for other harnesses; it receives
+Pi runs from in-memory settings/session with a Leveret-owned resource loader and
+an exact tool allowlist. No project-local settings, extensions, skills, templates,
+themes, context files, MCP configuration, system prompts, or executable discovery
+can extend it. `PI_OFFLINE=1`, `PI_TELEMETRY=0`, and
+`PI_SKIP_VERSION_CHECK=1` are enforced by the runner. A custom `LEVERET_RUNNER`
+command is the escape hatch for other harnesses; it receives
 `LEVERET_REPO`, `LEVERET_BASE`, `LEVERET_LEADS`, `LEVERET_GRAPH` and must print
 the verify-output JSON (see `agents/verify.md`).
+
+Serena starts only when `SERENA_HOME` contains `leveret-lsp-manifest.json`, created
+by the prefetch command. Its dashboard, HTTP stats endpoint, GUI, tray process, and
+anonymous usage reporting are disabled. Metrics are captured durably by the Pi
+adapter. `leveret-runner-omp` remains available as a compatibility runner.
 
 Without any runner configured, reviews are deterministic-only: engine findings
 post directly and the walkthrough says the agent lenses did not run.

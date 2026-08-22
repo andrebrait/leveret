@@ -156,16 +156,13 @@ no exposed port. Both are thin entries over the same
 scan/runner/renderer internals. Known shared wart: fork PRs get a read-only token —
 punted for MVP.
 
-**Sessions persist; threads are conversational.** The runner's agent session (omp
-`--session-dir`/`--resume`) is saved per PR — Actions cache with artifact fallback,
-`LEVERET_DATA` in webhook mode. A reply in a finding thread triggers a run that
-restores the session and resumes it with the comment: the agent answers with full
-memory of its own review and evidence, can re-verify and concede or defend, posts
-in-thread, and routes rulings into `learn`. Cache eviction degrades gracefully to a
-fresh read of the PR. Session transcripts contain code and reasoning; they live in
-the repo's own Actions storage or the self-hosted box — the same trust domain as
-the code. Build order: Actions review workflow, then session persistence + reply
-resume, then App-server session parity.
+**Threads become conversational after session persistence ships.** The standardized
+Pi client currently uses an in-memory session for each phase: no transcript is
+written or discovered. The planned per-PR conversation store remains Actions cache
+with artifact fallback or `LEVERET_DATA` in webhook mode. A reply would restore only
+that trusted store, re-verify, then route a human ruling into `learn`. Cache eviction
+must still degrade to a fresh review. Build order remains Actions review workflow,
+then an explicit Pi session store + reply resume, then App-server parity.
 
 ## Reporting (product decision, 2026-08-21)
 
@@ -247,41 +244,45 @@ So the brand rides on three surfaces instead of on owning the name:
 Mode 2 would restore a single branded App, at the cost of the perimeter — which is
 the trade that mode 2 already is.
 
-### Runner standardization (owner decision, 2026-08-21)
+### Runner standardization (owner decision, updated 2026-08-22)
 
 Prompt contracts alone do not standardize a reviewer: the harness (tool
 orchestration, system framing, output discipline) shapes the review as much as the
 model. The same ruling as the code graph applies — **the harness is part of the
-reviewer**, so the App's default runner pins one: `leveret-runner-omp`, built on
-omp.sh, harness version pinned, extras (its own LSP etc.) disabled — Serena stays
-the standardized LSP surface (read-only; we do not transform code, and future fix
-suggestions remain single-file `suggested_fix` text; revisit the Serena/omp-LSP
-swap only if omp's language breadth reaches ours). omp.sh's out-of-the-box
-subscription support is what keeps BYOAI intact at the provider level: the user
-picks provider + model, leveret picks everything else. Every published walkthrough
-records harness + version + model (the run-configuration line), so standardization
-is auditable. `LEVERET_RUNNER` stays as the escape hatch for bring-your-own-harness
-users — their reviews are labeled as such.
+reviewer** — but OMP was an experiment, not a reference feature set. The standardized
+client is now `leveret-runner-pi`, built on pinned upstream Pi. Pi owns providers,
+OAuth, model calls and the agent loop. Leveret owns the system prompt, tools,
+deadlines, metrics and output contract.
 
-Recorded for later (owner, 2026-08-21): `pi` — the harness omp.sh builds on — may be
-the purer long-term environment if it covers (or can cheaply gain) the vendors and
-subscription plans omp ships with. Both allow overriding the system prompt, which
-serves the ultimate goal: a leveret-authored reviewer system prompt (plenty of
-harnesses publish theirs to learn from). Sequence: `leveret-runner-omp` is the MVP;
-the first trial runs WITHOUT touching the system prompt; extras related to LSP and
-AST navigation, and any output compaction/capturing, are turned off in either
-harness. Evaluate pi + custom system prompt after the MVP proves the seam.
+The client uses in-memory settings and sessions plus a resource loader that returns
+no project settings, prompts, context files, extensions, skills or themes. The
+reviewed checkout cannot extend the toolset or replace the system prompt. Built-in
+mutation and shell tools are absent. A bounded probe tool is exposed only when the
+host explicitly declares an isolated review sandbox.
 
-`leveret-runner-omp` parameterization (owner, 2026-08-21): callers configure it via
-CLI args and env vars (CLI wins) — model (default gpt-5.6-sol), thinking (default
-high), per-phase max-time, and a raw omp passthrough for provider-shaped flags
-(profile, api-key, provider) so new omp capabilities need no runner release. The
-purity flags (no-skills/extensions/rules/session/lsp, compaction off) are NOT
-overridable — they are the standardization — and the effective harness + version +
-model + thinking always land in the walkthrough's run-configuration line. The MCP + skill path (running reviews
-inside the user's own client, their harness by design) is deliberately NOT
-standardized: a human is present there to judge; consistency matters where reviews
-are autonomous and comparable.
+Leveret registers its scan/context/AST/memory functions directly, invokes CodeGraph
+through fixed adapters, and proxies a small read-only Serena toolset. Serena starts
+only from a pre-staged `SERENA_HOME` manifest; runtime LSP downloads are refused.
+Its dashboard HTTP server, GUI, tray manager and anonymous usage report are disabled.
+The Pi adapter records durable tool metrics because Serena's dashboard-free counters
+otherwise remain process-local.
+
+Pi is pinned because its provider catalog and SDK shape are part of the reviewer.
+The required provider paths are OpenAI and Anthropic by API key, their personal
+subscription OAuth paths, and local OpenAI-compatible endpoints. The caller chooses
+provider, model, thinking and per-phase deadline; no raw harness passthrough exists.
+Every walkthrough records Pi/model, prompt hash, live capabilities, and phase tool
+metrics. `leveret-runner-omp` remains a compatibility binary, while
+`LEVERET_RUNNER` remains the bring-your-own-harness escape hatch.
+
+The interactive MCP path is deliberately not standardized: a human is present there
+to judge their own client and tool configuration. Autonomous App/Actions reviews use
+the Pi client so comparable reviews have one known prompt and tool surface.
+
+Pi is not required to reproduce OMP's findings, call order, or incidental feature
+set. OMP never became a reference implementation. The initial client is accepted on
+Leveret's provider, isolation, grounding, observability and output goals; prompt and
+tool-routing quality are expected to be tuned from subsequent organic reviews.
 
 ## Agent pipeline
 
