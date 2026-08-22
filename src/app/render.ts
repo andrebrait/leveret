@@ -112,7 +112,9 @@ export function renderWalkthrough(
       "",
       capabilities.lsp
         ? `LSP: live${capabilities.serena_version ? ` (Serena ${capabilities.serena_version})` : ""}.`
-        : `LSP: unavailable — ${capabilities.lsp_error ?? "no staged server for this checkout"}.`,
+        : capabilities.lsp_error
+          ? "LSP: unavailable — startup failed; details are retained in the private run artifact."
+          : "LSP: unavailable — no staged server for this checkout.",
       capabilities.probe
         ? "Behavioral probe: available inside the declared review sandbox."
         : "Behavioral probe: unavailable — no review sandbox was declared.",
