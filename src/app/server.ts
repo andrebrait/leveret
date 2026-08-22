@@ -25,7 +25,7 @@ import {
 } from "./manifest.js";
 import { ackMessage, doneMessage, failMessage, renderInline, renderWalkthrough, skipMessage, type Tier, type VerifyOutput } from "./render.js";
 import { makeLogger } from "./log.js";
-import { routeEvent, verifySignature, type Job } from "./webhook.js";
+import { preBodyReject, readCappedBody, routeEvent, verifySignature, type Job } from "./webhook.js";
 
 // The App layer: GitHub plumbing only. It holds the App key and webhook secret —
 // never a model credential. The BYOAI seam is LEVERET_RUNNER: a user-supplied
@@ -293,15 +293,23 @@ export async function main(): Promise<void> {
       return;
     }
 
-    const chunks: Buffer[] = [];
-    req.on("data", (c: Buffer) => chunks.push(c));
-    req.on("end", () => {
-      if (!creds) {
-        res.writeHead(503).end();
+    // this endpoint is public: refuse on headers alone before buffering anything
+    const reject = preBodyReject(req.headers);
+    if (reject) {
+      res.writeHead(reject).end();
+      return;
+    }
+    if (!creds) {
+      res.writeHead(503).end();
+      return;
+    }
+    const activeCreds = creds;
+    void readCappedBody(req).then((body) => {
+      if (body === null) {
+        res.writeHead(413).end();
         return;
       }
-      const body = Buffer.concat(chunks).toString("utf8");
-      if (!verifySignature(creds.webhookSecret, body, req.headers["x-hub-signature-256"] as string | undefined)) {
+      if (!verifySignature(activeCreds.webhookSecret, body, req.headers["x-hub-signature-256"] as string | undefined)) {
         res.writeHead(401).end();
         return;
       }
@@ -314,7 +322,6 @@ export async function main(): Promise<void> {
       }
       res.writeHead(202).end(); // ack fast; work happens after
       if (!job) return;
-      const activeCreds = creds;
       const run = job.kind === "review" ? reviewJob(job, activeCreds) : learnFeedJob(job);
       run.catch(() => {}); // job-level loggers already reported with the run id
     });

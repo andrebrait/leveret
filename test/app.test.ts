@@ -1,7 +1,7 @@
 import { createHmac } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import { renderInline, renderWalkthrough } from "../src/app/render.js";
-import { routeEvent, verifySignature } from "../src/app/webhook.js";
+import { MAX_BODY_BYTES, preBodyReject, readCappedBody, routeEvent, verifySignature } from "../src/app/webhook.js";
 import type { ScanResult } from "../src/findings.js";
 import type { VerifyOutput } from "../src/app/render.js";
 
@@ -217,5 +217,40 @@ describe("skip configuration and notice", () => {
     expect(p.review.skipTitle).toBe("\\[hold\\]");
     const empty = await loadProfile(join(d, "missing.yml"));
     expect(empty.review.enabled).toBe(true);
+  });
+});
+
+describe("pre-body rejection", () => {
+  it("refuses anything that cannot be a GitHub delivery before a byte is read", () => {
+    const ok = { "x-hub-signature-256": "sha256=x", "x-github-event": "pull_request" };
+    expect(preBodyReject(ok)).toBeNull();
+    expect(preBodyReject({ "x-github-event": "pull_request" })).toBe(401);
+    expect(preBodyReject({ "x-hub-signature-256": "sha256=x" })).toBe(400);
+    // GitHub caps payloads at 25 MB, so anything declaring more is not from GitHub
+    expect(preBodyReject({ ...ok, "content-length": String(MAX_BODY_BYTES + 1) })).toBe(413);
+    expect(preBodyReject({ ...ok, "content-length": String(MAX_BODY_BYTES) })).toBeNull();
+  });
+});
+
+describe("readCappedBody", () => {
+  it("returns the body, and null once the cap is passed — chunked has no length to trust", async () => {
+    const { Readable } = await import("node:stream");
+    expect(await readCappedBody(Readable.from([Buffer.from("hel"), Buffer.from("lo")]), 10)).toBe("hello");
+    const big = Readable.from([Buffer.alloc(6), Buffer.alloc(6)]);
+    expect(await readCappedBody(big, 10)).toBeNull();
+  });
+
+  it("stops buffering instead of collecting the whole flood", async () => {
+    const { Readable } = await import("node:stream");
+    let pushed = 0;
+    const flood = new Readable({
+      read() {
+        pushed += 1;
+        this.push(Buffer.alloc(1024));
+        if (pushed > 1000) this.push(null);
+      },
+    });
+    expect(await readCappedBody(flood, 4096)).toBeNull();
+    expect(pushed).toBeLessThan(20); // destroyed early, not drained
   });
 });
