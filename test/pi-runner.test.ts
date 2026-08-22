@@ -6,8 +6,10 @@ import { buildPiSystemPrompt } from "../src/runner/pi-system.js";
 import {
   buildPiResourceLoader,
   parseAssistantJson,
+  parseDuration,
   piRuntimeConfig,
   toolMetricsSummary,
+  verifySchemaGaps,
   withDeadline,
 } from "../src/runner/pi.js";
 import {
@@ -34,14 +36,14 @@ const toolOptions = (repo: string, sandboxed = false) => ({
 });
 
 describe("Pi runtime isolation", () => {
-  it("ships Pi as the standard runner while retaining the OMP rollback binary", async () => {
+  it("ships Pi as the sole standard runner", async () => {
     const { readFileSync } = await import("node:fs");
     const manifest = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8"));
     expect(manifest.bin).toMatchObject({
       "leveret-runner-pi": "dist/runner/pi.js",
-      "leveret-runner-omp": "dist/runner/omp.js",
       "leveret-prefetch-serena": "dist/runner/prefetch-serena.js",
     });
+    expect(manifest.bin).not.toHaveProperty("leveret-runner-omp");
     expect(manifest.dependencies["@earendil-works/pi-coding-agent"]).toBe("0.84.2");
   });
 
@@ -223,6 +225,34 @@ describe("Pi runtime isolation", () => {
 });
 
 describe("Pi result and metrics parsing", () => {
+  it("parses runner durations", () => {
+    expect(parseDuration("30m")).toBe(30 * 60_000);
+    expect(parseDuration("90")).toBe(90_000);
+    expect(parseDuration("1h")).toBe(3_600_000);
+    expect(parseDuration("bogus")).toBeNull();
+  });
+
+  it("names every missing verify-output section", () => {
+    const bare = { report: [] };
+    expect(verifySchemaGaps(bare, false)).toEqual(["verdicts", "coverage"]);
+    const full = {
+      report: [],
+      verdicts: [],
+      coverage: { lenses: [{ lens: "x", outcome: "clean" }], files: [{ file: "a", verdict: "considered-fine" }] },
+    };
+    expect(verifySchemaGaps(full, false)).toEqual([]);
+    expect(verifySchemaGaps(full, true)).toEqual(["resolutions"]);
+    expect(verifySchemaGaps({ report: [], verdicts: [], coverage: { lenses: [], files: [] } }, false)).toEqual(["coverage"]);
+  });
+
+  it("kills a wedged child at its deadline", async () => {
+    const started = Date.now();
+    const result = await run("sleep", ["30"], "/tmp", { timeoutMs: 300 });
+    expect(Date.now() - started).toBeLessThan(5000);
+    expect(result.code).not.toBe(0);
+    expect(result.signal).toBeTruthy();
+  });
+
   it("accepts fenced JSON and rejects prose", () => {
     expect(parseAssistantJson('```json\n{"concerns":[]}\n```')).toEqual({ concerns: [] });
     expect(() => parseAssistantJson("looks good")).toThrow(/JSON/i);

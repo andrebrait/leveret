@@ -16,7 +16,6 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { loadContract } from "../prompts.js";
 import { which } from "../exec.js";
-import { parseDuration, verifySchemaGaps } from "./omp.js";
 import { buildPiSystemPrompt, PI_SYSTEM_PROMPT_VERSION } from "./pi-system.js";
 import { buildPiTools } from "./pi-tools.js";
 import { connectSerena, serenaBundleProblem } from "./serena.js";
@@ -34,6 +33,28 @@ export interface PiRuntimeConfig {
   provider: string;
   thinking: string;
   deadlineMs: number;
+}
+
+/** Duration accepted by the runner: "30m", "1h", or bare seconds. */
+export function parseDuration(value: string): number | null {
+  const match = value.match(/^(\d+)([smh]?)$/);
+  if (!match) return null;
+  const amount = Number(match[1]);
+  return match[2] === "h" ? amount * 3_600_000 : match[2] === "m" ? amount * 60_000 : amount * 1000;
+}
+
+/** Name missing verify-output sections so Pi can make one corrective retry. */
+export function verifySchemaGaps(output: unknown, priorSupplied: boolean): string[] {
+  const value = (output ?? {}) as Record<string, unknown>;
+  const gaps: string[] = [];
+  if (!Array.isArray(value.report)) gaps.push("report");
+  if (!Array.isArray(value.verdicts)) gaps.push("verdicts");
+  const coverage = value.coverage as { lenses?: unknown[]; files?: unknown[] } | undefined;
+  if (!coverage || !Array.isArray(coverage.lenses) || !Array.isArray(coverage.files) || (coverage.lenses.length === 0 && coverage.files.length === 0)) {
+    gaps.push("coverage");
+  }
+  if (priorSupplied && !Array.isArray(value.resolutions)) gaps.push("resolutions");
+  return gaps;
 }
 
 export function piRuntimeConfig(params: PiRunnerParams, env: Record<string, string | undefined>): PiRuntimeConfig {

@@ -188,8 +188,8 @@ describe("acknowledgement messages", () => {
 
   it("the failure edit says what broke instead of vanishing", async () => {
     const { failMessage } = await import("../src/app/render.js");
-    const msg = failMessage(new Error("omp exploded"));
-    expect(msg).toContain("omp exploded");
+    const msg = failMessage(new Error("runner exploded"));
+    expect(msg).toContain("runner exploded");
     expect(msg).toMatch(/🐇/);
   });
 });

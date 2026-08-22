@@ -107,12 +107,12 @@ describe("restartCommand", () => {
       "LEVERET_PUBLIC_URL=https://YOUR-PUBLIC-URL node /srv/leveret/dist/app/server.js",
     );
     expect(
-      restartCommand({ LEVERET_RUNNER: "node /srv/leveret/dist/runner/omp.js" }, [
+      restartCommand({ LEVERET_RUNNER: "node /srv/leveret/dist/runner/pi.js" }, [
         "/opt/node",
         "/srv/leveret/dist/app/server.js",
       ]),
     ).toBe(
-      "LEVERET_PUBLIC_URL=https://YOUR-PUBLIC-URL LEVERET_RUNNER='node /srv/leveret/dist/runner/omp.js' node /srv/leveret/dist/app/server.js",
+      "LEVERET_PUBLIC_URL=https://YOUR-PUBLIC-URL LEVERET_RUNNER='node /srv/leveret/dist/runner/pi.js' node /srv/leveret/dist/app/server.js",
     );
     expect(restartCommand({ LEVERET_RUNNER: "it's odd" }, ["/opt/node", "/s.js"])).toContain(
       "LEVERET_RUNNER='it'\\''s odd'",

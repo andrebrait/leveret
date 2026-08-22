@@ -235,7 +235,7 @@ therefore cannot teach future reviews through prompt injection.
 Serena starts only when `SERENA_HOME` contains `leveret-lsp-manifest.json`, created
 by the prefetch command. Its dashboard, HTTP stats endpoint, GUI, tray process, and
 anonymous usage reporting are disabled. Metrics are captured durably by the Pi
-adapter. `leveret-runner-omp` remains available as a compatibility runner.
+adapter.
 
 Without any runner configured, reviews are deterministic-only: engine findings
 post directly and the walkthrough says the agent lenses did not run.

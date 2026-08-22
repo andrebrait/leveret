@@ -80,8 +80,8 @@ runtime. Project settings, extensions, skills, prompt templates, context files a
 sessions are not discovered. You choose provider, model, and effort (`--model` /
 `--effort` / `--provider`, or the matching `LEVERET_RUNNER_*` env vars; defaults
 `openai/gpt-5.6-sol` at `high`). Every walkthrough records the effective client,
-model, prompt hash, capabilities, and tool metrics. `leveret-runner-omp` remains a
-compatibility runner, and a custom `LEVERET_RUNNER` remains the escape hatch.
+model, prompt hash, capabilities, and tool metrics. A custom `LEVERET_RUNNER`
+remains the bring-your-own-harness escape hatch.
 
 **Interactive (MCP).** Register the server in any MCP-capable client and drive
 reviews yourself — the served `review`/`verify` prompts arrive with your repo's

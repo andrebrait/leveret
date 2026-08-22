@@ -7,7 +7,6 @@
     "leveret": "dist/server.js",
     "leveret-app": "dist/app/server.js",
     "leveret-runner-pi": "dist/runner/pi.js",
-    "leveret-runner-omp": "dist/runner/omp.js",
     "leveret-prefetch-serena": "dist/runner/prefetch-serena.js"
   },
   "scripts": {
