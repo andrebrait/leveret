@@ -79,6 +79,11 @@ describe("publicHookProblem", () => {
     // "documentation" is the link, not a bare URL dumped in the sentence
     expect(html).toContain('<a href="https://github.com/leveret-dev/leveret/blob/main/docs/app.md#getting-started">documentation</a>');
     expect(html).toContain("tailscale funnel");
+    expect(html).toContain("Then restart with a public URL set, run:");
+    expect(html).toContain(
+      "<pre><code>LEVERET_PUBLIC_URL=https://YOUR-PUBLIC-URL node dist/app/server.js</code></pre>",
+    );
+    expect(html).not.toContain("server's own address");
     expect(html).not.toContain('name="manifest"');
   });
 

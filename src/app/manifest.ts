@@ -89,6 +89,9 @@ export function page(title: string, body: string): string {
  h2 { font-size: 1.25rem; font-weight: 600; margin: 0 0 1rem; }
  .center { text-align: center; }
  .note { font-size: .92rem; color: ${MARK}b3; } .note p { margin: 0; }
+ pre { margin: .75rem 0 0; padding: .7rem .8rem; overflow-x: auto; background: ${MARK}14;
+        border: 1px solid ${MARK}1f; border-radius: .45rem; }
+ pre code { background: none; padding: 0; }
  .err { color: ${MINUS}; }
 </style></head>
 <body><main>
@@ -173,10 +176,10 @@ export function renderSetupPage(
       <li><code>tailscale funnel --bg 8090</code> — stable URL, nothing else to run</li>
       <li><code>cloudflared tunnel --url http://127.0.0.1:8090</code></li>
       <li><code>npx -y smee-client -u https://smee.io/YOUR_CHANNEL -t http://127.0.0.1:8090/</code>
-      — relays webhooks only, so browse this page on the server's own address</li>
+      — relays webhooks only</li>
     </ul>
-    <p>Then restart with the public URL:
-    <code>LEVERET_PUBLIC_URL=https://YOUR-PUBLIC-URL node dist/app/server.js</code></p>
+    <p>Then restart with a public URL set, run:</p>
+    <pre><code>LEVERET_PUBLIC_URL=https://YOUR-PUBLIC-URL node dist/app/server.js</code></pre>
   </div>`,
     );
   }
