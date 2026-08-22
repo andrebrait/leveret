@@ -36,7 +36,7 @@ export function buildManifest(hookUrl: string, redirectBase: string, name = bran
     name,
     description:
       "Leveret — self-hosted code review. The engine, the checkout and the model credentials stay on the owner's infrastructure; nothing about the reviewed code leaves it.",
-    url: "https://github.com/andrebrait/leveret",
+    url: "https://github.com/leveret-dev/leveret",
     hook_attributes: { url: `${hook}/` },
     redirect_url: `${redirect}/setup/callback`,
     public: false,

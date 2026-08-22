@@ -10,7 +10,7 @@ Prerequisites: Node 22+ and the [reviewer toolbelt](../README.md#the-reviewer-to
 **1. Build and register:**
 
 ```sh
-git clone https://github.com/andrebrait/leveret && cd leveret
+git clone https://github.com/leveret-dev/leveret && cd leveret
 npm install && npm run build
 claude mcp add leveret -- node "$PWD/dist/server.js"
 ```

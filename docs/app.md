@@ -12,7 +12,7 @@ and [omp.sh](https://omp.sh) authenticated with your provider.
 **1. Build:**
 
 ```sh
-git clone https://github.com/andrebrait/leveret && cd leveret
+git clone https://github.com/leveret-dev/leveret && cd leveret
 npm install && npm run build
 ```
 
