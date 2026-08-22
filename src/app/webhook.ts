@@ -15,6 +15,51 @@ export function verifySignature(
   return timingSafeEqual(Buffer.from(got, "hex"), Buffer.from(expected, "hex"));
 }
 
+
+/** GitHub caps webhook payloads at 25 MB and simply does not deliver anything
+ * larger, so nothing legitimate ever exceeds this. */
+export const MAX_BODY_BYTES = 25 * 1024 * 1024;
+
+/** The rejections that need no body. A webhook endpoint is public — under relay
+ * mode its URL is published in a repository — and the signature cannot be checked
+ * until the whole body has been read, so anything that cannot be a GitHub delivery
+ * is refused before a single byte is buffered. Returns the status to answer with,
+ * or null to go on and read the body. */
+export function preBodyReject(
+  headers: Record<string, string | string[] | undefined>,
+): number | null {
+  if (!headers["x-hub-signature-256"]) return 401;
+  if (!headers["x-github-event"]) return 400;
+  const declared = Number(headers["content-length"]);
+  if (Number.isFinite(declared) && declared > MAX_BODY_BYTES) return 413;
+  return null;
+}
+
+/** Read a request body, giving up the moment it passes the cap — a chunked
+ * request declares no length, so the counter is the only real bound. Returns null
+ * when the cap is passed, having destroyed the stream rather than drained it. */
+export function readCappedBody(
+  req: NodeJS.ReadableStream & { destroy?: (err?: Error) => void },
+  cap = MAX_BODY_BYTES,
+): Promise<string | null> {
+  return new Promise((resolve) => {
+    const chunks: Buffer[] = [];
+    let size = 0;
+    req.on("data", (c: Buffer) => {
+      size += c.length;
+      if (size > cap) {
+        req.destroy?.();
+        resolve(null);
+        return;
+      }
+      chunks.push(c);
+    });
+    req.on("end", () => resolve(Buffer.concat(chunks).toString("utf8")));
+    req.on("error", () => resolve(null));
+    req.on("close", () => resolve(null));
+  });
+}
+
 export type Job =
   | {
       kind: "review";
