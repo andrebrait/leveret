@@ -14,9 +14,11 @@ import { botLogin, fetchReviewThreads, makeApp, postComment, postReview, replyIn
 import { parsePriorThreads, resolvedReply, type PriorFinding } from "./incremental.js";
 import {
   convertManifestCode,
+  dataDirLabel,
   loadCredentials,
   page,
   renderCallbackPage,
+  renderConfiguredPage,
   renderSetupPage,
   saveCredentials,
   type AppCredentials,
@@ -243,7 +245,7 @@ export async function main(): Promise<void> {
 
     if (req.method === "GET" && url.pathname === "/setup") {
       if (creds) {
-        html(res, 200, page("Leveret", "<p class=\"card\">Already configured. Delete the credentials in the data dir to re-run setup.</p>"));
+        html(res, 200, renderConfiguredPage(dataDirLabel(process.env)));
         return;
       }
       const state = randomBytes(16).toString("hex");
@@ -317,8 +319,8 @@ export async function main(): Promise<void> {
   server.listen(port, () =>
     console.log(
       creds
-        ? `Leveret listening on :${port}`
-        : `Leveret UNCONFIGURED — open http://127.0.0.1:${port}/setup to create your GitHub App`,
+        ? `Leveret listening on :${port} (credentials in ${DATA_DIR})`
+        : `Leveret UNCONFIGURED — open http://127.0.0.1:${port}/setup to create your GitHub App (credentials will be written to ${DATA_DIR})`,
     ),
   );
 }
