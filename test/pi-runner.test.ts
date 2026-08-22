@@ -27,6 +27,7 @@ const toolOptions = (repo: string, sandboxed = false) => ({
   repo,
   base: "HEAD",
   profilePath: `${repo}/.trusted-profile.yml`,
+  rulesRoot: repo,
   memoryRepo: repo,
   graphLive: false,
   sandboxed,
@@ -72,6 +73,7 @@ describe("Pi runtime isolation", () => {
     const tools = await buildPiTools(toolOptions("/tmp/repo"));
     const names = tools.tools.map((tool) => tool.name);
     expect(names).toContain("leveret_scan");
+    expect(names).toContain("leveret_diff");
     expect(names).toContain("leveret_ast_search");
     expect(names).toContain("leveret_read");
     expect(names).not.toContain("read");
@@ -123,6 +125,30 @@ describe("Pi runtime isolation", () => {
     }
     expect(runtime.getModel("openai", "gpt-5.6-sol")).toBeDefined();
     expect(runtime.getModel("openai-codex", "gpt-5.6-sol")).toBeDefined();
+  });
+
+  it("loads a local OpenAI-compatible model with only a non-secret placeholder", async () => {
+    const { mkdtempSync, rmSync, writeFileSync } = await import("node:fs");
+    const { tmpdir } = await import("node:os");
+    const { join } = await import("node:path");
+    const root = mkdtempSync(join(tmpdir(), "leveret-local-model-"));
+    const modelsPath = join(root, "models.json");
+    writeFileSync(modelsPath, JSON.stringify({
+      providers: {
+        local: {
+          baseUrl: "http://127.0.0.1:11434/v1",
+          api: "openai-completions",
+          apiKey: "local",
+          models: [{ id: "qwen-test" }],
+        },
+      },
+    }));
+    try {
+      const runtime = await ModelRuntime.create({ allowModelNetwork: false, refreshOnCreate: false, modelsPath });
+      expect(runtime.getModel("local", "qwen-test")).toMatchObject({ provider: "local", id: "qwen-test" });
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
   });
 
   it("builds routing guidance from exactly the active tools", () => {
@@ -204,9 +230,9 @@ describe("Pi result and metrics parsing", () => {
 
   it("summarizes phase-attributed tool events", () => {
     const summary = toolMetricsSummary([
-      { phase: "review", toolCallId: "1", toolName: "codegraph_explore", startedAt: 10, endedAt: 30, duration_ms: 20, isError: false, outcome: "success", input_bytes: 5, output_bytes: 8, output_tokens_estimate: 2, args_sha256: "a", server: "codegraph", cache: "cold-index" },
-      { phase: "review", toolCallId: "2", toolName: "codegraph_explore", startedAt: 40, endedAt: 55, duration_ms: 15, isError: true, outcome: "error", input_bytes: 5, output_bytes: 8, output_tokens_estimate: 2, args_sha256: "b", server: "codegraph", cache: "cold-index" },
-      { phase: "verify", toolCallId: "3", toolName: "lsp_references", startedAt: 60, endedAt: 70, duration_ms: 10, isError: false, outcome: "success", input_bytes: 5, output_bytes: 8, output_tokens_estimate: 2, args_sha256: "c", server: "serena", cache: "staged-cold" },
+      { phase: "review", toolCallId: "1", toolName: "codegraph_explore", startedAt: 10, endedAt: 30, duration_ms: 20, isError: false, outcome: "success", input_bytes: 5, output_bytes: 8, output_tokens_estimate: 2, args_sha256: "a", server: "codegraph", cache: "unknown" },
+      { phase: "review", toolCallId: "2", toolName: "codegraph_explore", startedAt: 40, endedAt: 55, duration_ms: 15, isError: true, outcome: "error", input_bytes: 5, output_bytes: 8, output_tokens_estimate: 2, args_sha256: "b", server: "codegraph", cache: "unknown" },
+      { phase: "verify", toolCallId: "3", toolName: "lsp_references", startedAt: 60, endedAt: 70, duration_ms: 10, isError: false, outcome: "success", input_bytes: 5, output_bytes: 8, output_tokens_estimate: 2, args_sha256: "c", server: "serena", cache: "unknown" },
     ]);
     expect(summary).toEqual({
       review: { codegraph_explore: { calls: 2, errors: 1, duration_ms: 35 } },
@@ -271,15 +297,10 @@ describe("Serena headless and offline staging", () => {
     const fixtures = serenaPrefetchFixtures();
     expect(fixtures.map((f) => f.language)).toEqual([
       "typescript",
-      "python",
       "php",
       "bash",
       "yaml",
       "json",
-      "cpp",
-      "go",
-      "rust",
-      "java",
     ]);
     for (const fixture of fixtures) {
       expect(fixture.files.length).toBeGreaterThan(0);
@@ -311,21 +332,23 @@ describe("Serena headless and offline staging", () => {
     mkdirSync(repo);
     mkdirSync(home);
     mkdirSync(join(repo, "node_modules"));
-    writeFileSync(join(home, "leveret-lsp-manifest.json"), '{"languages":["php","python","rust"]}\n');
+    const phpLsp = join(home, "intelephense");
+    writeFileSync(phpLsp, "fixture\n");
+    writeFileSync(join(home, "leveret-lsp-manifest.json"), `${JSON.stringify({ languages: ["php", "typescript"], ls_paths: { php: phpLsp, typescript: join(home, "typescript-language-server") } })}\n`);
     writeFileSync(join(repo, "composer.json"), "{}\n");
     writeFileSync(join(repo, "plugin.inc"), "<?php function plugin() {}\n");
     writeFileSync(join(repo, "lib.rs"), "pub fn value() {}\n");
     writeFileSync(join(repo, "node_modules", "ignored.py"), "value = 1\n");
     try {
       const shadow = await createSerenaShadowProject(repo);
-      expect(await prepareSerenaProject(repo, shadow, home)).toEqual(["php", "rust"]);
+      expect(await prepareSerenaProject(repo, shadow, home)).toEqual(["php"]);
       expect(lstatSync(join(shadow, "plugin.inc")).isSymbolicLink()).toBe(true);
       expect(existsSync(join(repo, ".serena"))).toBe(false);
       const config = readFileSync(join(shadow, ".serena", "project.yml"), "utf8");
       expect(config).toContain("read_only: true");
       expect(config).toContain('file_filter:');
       expect(config).toContain('  - .inc');
-      expect(config).not.toContain("python");
+      expect(config).toContain(`ls_path: ${phpLsp}`);
       rmSync(shadow, { recursive: true, force: true });
     } finally {
       rmSync(root, { recursive: true, force: true });
@@ -339,12 +362,13 @@ describe("Serena headless and offline staging", () => {
     const root = mkdtempSync(join(tmpdir(), "leveret-prefetch-test-"));
     const home = join(root, "serena-home");
     const fake = join(root, "serena-fake");
-    writeFileSync(fake, "#!/bin/sh\nexit 0\n");
+    writeFileSync(fake, '#!/bin/sh\nmkdir -p "$SERENA_HOME/language_servers/static/TypeScriptLanguageServer/ts-lsp/node_modules/.bin"\n: > "$SERENA_HOME/language_servers/static/TypeScriptLanguageServer/ts-lsp/node_modules/.bin/typescript-language-server"\n');
     chmodSync(fake, 0o755);
     try {
       await prefetchSerena({ home, languages: ["typescript"], serenaBin: fake });
       const manifest = JSON.parse(readFileSync(join(home, "leveret-lsp-manifest.json"), "utf8"));
       expect(manifest.languages).toEqual(["typescript"]);
+      expect(manifest.ls_paths.typescript).toContain("TypeScriptLanguageServer");
       const config = readFileSync(join(home, "serena_config.yml"), "utf8");
       expect(config).toContain("web_dashboard: false");
       expect(config).toMatch(/projects:\s*\[\]/);

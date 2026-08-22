@@ -89,7 +89,7 @@ export interface ToolMetric {
   output_tokens_estimate: number;
   args_sha256: string;
   server: "leveret" | "codegraph" | "serena" | "probe";
-  cache: "staged-cold" | "cold-index" | "n/a";
+  cache: "unknown" | "n/a";
 }
 
 export function toolMetricsSummary(metrics: ToolMetric[]): Record<string, Record<string, { calls: number; errors: number; duration_ms: number }>> {
@@ -139,6 +139,7 @@ async function runPhase(options: {
   tools: Awaited<ReturnType<typeof buildPiTools>>["tools"];
   metrics: ToolMetric[];
 }): Promise<unknown> {
+  const phaseDeadline = Date.now() + options.runtime.deadlineMs;
   for (let attempt = 1; attempt <= 2; attempt++) {
     const settingsManager = SettingsManager.inMemory(
       {
@@ -200,7 +201,7 @@ async function runPhase(options: {
           output_tokens_estimate: Math.ceil(Buffer.byteLength(output) / 4),
           args_sha256: start?.argsSha256 ?? createHash("sha256").update("{}").digest("hex"),
           server,
-          cache: server === "serena" ? "staged-cold" : server === "codegraph" ? "cold-index" : "n/a",
+          cache: server === "serena" || server === "codegraph" ? "unknown" : "n/a",
         });
       } else if (event.type === "message_end" && event.message.role === "assistant") {
         assistantText = event.message.content
@@ -210,9 +211,11 @@ async function runPhase(options: {
       }
     });
     try {
+      const remainingMs = phaseDeadline - Date.now();
+      if (remainingMs <= 0) throw new Error(`Pi phase exceeded ${options.runtime.deadlineMs}ms and was aborted`);
       await withDeadline(
         session.prompt(options.prompt, { expandPromptTemplates: false }),
-        options.runtime.deadlineMs,
+        remainingMs,
         () => session.abort(),
       );
       return parseAssistantJson(assistantText);
@@ -296,6 +299,7 @@ export async function main(): Promise<void> {
       sandboxed: process.env.LEVERET_SANDBOXED === "1",
       serena,
       profilePath: trusted.profilePath,
+      rulesRoot: trusted.root,
       memoryRepo: trusted.root,
       base,
     });

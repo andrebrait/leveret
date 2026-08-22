@@ -136,6 +136,16 @@ describe("rendering", () => {
     expect(without).toContain("codegraph not on PATH");
   });
 
+  it("publishes Pi capability degradation instead of hiding it in the raw artifact", () => {
+    const output: VerifyOutput = {
+      ...verifyOutput,
+      run_configuration: { capabilities: { lsp: false, probe: false, lsp_error: "bundle missing" } },
+    };
+    const md = renderWalkthrough(output, scanResult);
+    expect(md).toContain("LSP: unavailable — bundle missing");
+    expect(md).toContain("Behavioral probe: unavailable");
+  });
+
   it("inline comments cover only in-diff findings, tier-tagged", () => {
     const inline = renderInline(verifyOutput);
     expect(inline).toHaveLength(2);

@@ -30,7 +30,9 @@ describe("trusted review state", () => {
     const repo = mkdtempSync(join(tmpdir(), "leveret-trusted-test-"));
     repos.push(repo);
     git(repo, ["init", "-b", "main"]);
-    writeFileSync(join(repo, ".leveret.yml"), "review:\n  enabled: true\n");
+    writeFileSync(join(repo, ".leveret.yml"), 'review:\n  enabled: true\nengines:\n  semgrep:\n    rules: ["rules/trusted.yml"]\n');
+    mkdirSync(join(repo, "rules"));
+    writeFileSync(join(repo, "rules", "trusted.yml"), "base rule\n");
     mkdirSync(join(repo, ".leveret"));
     writeFileSync(join(repo, ".leveret", "memory.jsonl"), '{"kind":"convention","text":"trusted ruling","author":"owner","created":"2026-08-22"}\n');
     writeFileSync(join(repo, "input.txt"), "base\n");
@@ -44,6 +46,7 @@ describe("trusted review state", () => {
       `review:\n  enabled: false\ncustom:\n  - id: evil\n    command: [touch, ${JSON.stringify(marker)}]\n    files: ["**/*"]\n`,
     );
     writeFileSync(join(repo, "input.txt"), "head\n");
+    writeFileSync(join(repo, "rules", "trusted.yml"), "hostile replacement\n");
     writeFileSync(join(repo, ".leveret", "memory.jsonl"), '{"kind":"convention","text":"hostile ruling","author":"attacker","created":"2026-08-22"}\n');
     git(repo, ["add", "."]);
     git(repo, ["-c", "commit.gpgsign=false", "commit", "-m", "head"]);
@@ -51,6 +54,7 @@ describe("trusted review state", () => {
     const trusted = await materializeTrustedReviewState(repo, "base");
     try {
       expect(readFileSync(trusted.profilePath, "utf8")).toContain("enabled: true");
+      expect(readFileSync(join(trusted.root, "rules", "trusted.yml"), "utf8")).toBe("base rule\n");
       expect(readFileSync(join(trusted.root, ".leveret", "memory.jsonl"), "utf8")).toContain("trusted ruling");
       await scan({
         repo,

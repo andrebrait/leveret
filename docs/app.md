@@ -30,6 +30,16 @@ the provisioned credentials and never launch the login UI. API-key environment
 variables remain supported. The runner disables model-catalog refreshes and never
 passes these credentials to tools.
 
+For a keyless local OpenAI-compatible server, add a provider to
+`$LEVERET_PI_AGENT_DIR/models.json` (Pi requires only a non-secret placeholder):
+
+```json
+{"providers":{"local":{"baseUrl":"http://127.0.0.1:11434/v1","api":"openai-completions","apiKey":"local","models":[{"id":"qwen2.5-coder:7b"}]}}}
+```
+
+Then run with `--provider local --model qwen2.5-coder:7b`. The model request is the
+only network path Pi needs; tool/update/package networks remain disabled.
+
 Optionally stage the curated Serena LSP bundle during installation. This command
 performs downloads now; reviews refuse runtime LSP downloads:
 
@@ -37,6 +47,12 @@ performs downloads now; reviews refuse runtime LSP downloads:
 SERENA_HOME=/opt/leveret/serena-home \
 node dist/runner/prefetch-serena.js --home /opt/leveret/serena-home
 ```
+
+The initial self-contained bundle covers TypeScript/JavaScript, PHP (including
+project-scoped `.inc`), Bash, YAML, and JSON. The manifest pins each absolute
+server executable under `SERENA_HOME`; prefetch fails instead of advertising a
+language backed only by a host toolchain or uvx cache. Python, C/C++, Go, Rust, and
+Java remain explicitly unavailable until their executables/runtimes are packaged.
 
 **2. Make the machine reachable for webhooks** (pick one):
 
@@ -210,6 +226,11 @@ For autonomous reviews, `.leveret.yml` and `.leveret/memory.jsonl` are read from
 the trusted base commit, not the pull-request head. Custom profile engines are not
 executed by the App/Pi path; use built-in engines or an explicitly sandboxed custom
 harness.
+
+The Pi reviewer can read those trusted rulings but cannot write new ones. Its
+verdicts are retained in the run artifact, while versioned repo memory and human
+replies through the learn feed remain the durable write paths. A reviewed checkout
+therefore cannot teach future reviews through prompt injection.
 
 Serena starts only when `SERENA_HOME` contains `leveret-lsp-manifest.json`, created
 by the prefetch command. Its dashboard, HTTP stats endpoint, GUI, tray process, and

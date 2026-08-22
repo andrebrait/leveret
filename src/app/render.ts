@@ -29,6 +29,14 @@ export interface VerifyOutput {
     lenses: { lens: string; outcome: string }[];
     files: { file: string; verdict: string; note?: string }[];
   };
+  run_configuration?: {
+    capabilities?: {
+      lsp?: boolean;
+      probe?: boolean;
+      lsp_error?: string;
+      serena_version?: string;
+    };
+  };
 }
 
 const TIER_ORDER: Record<Tier, number> = { critical: 0, major: 1, minor: 2, nit: 3 };
@@ -96,6 +104,18 @@ export function renderWalkthrough(
       graph.ok
         ? "Code graph: live (structural blast radius queried, not greped)."
         : `Code graph: unavailable — ${graph.detail ?? "unknown"}; blast radius fell back to ast_search/grep.`,
+    );
+  }
+  const capabilities = v.run_configuration?.capabilities;
+  if (capabilities) {
+    s.push(
+      "",
+      capabilities.lsp
+        ? `LSP: live${capabilities.serena_version ? ` (Serena ${capabilities.serena_version})` : ""}.`
+        : `LSP: unavailable — ${capabilities.lsp_error ?? "no staged server for this checkout"}.`,
+      capabilities.probe
+        ? "Behavioral probe: available inside the declared review sandbox."
+        : "Behavioral probe: unavailable — no review sandbox was declared.",
     );
   }
   {
