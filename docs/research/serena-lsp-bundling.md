@@ -51,7 +51,10 @@ backend installs `intelephense@1.14.4`, whose package license grants personal,
 non-transferable use and expressly prohibits copying and distribution. Leveret
 must remove it from redistributable artifacts. `php_phpantom` (MIT, self-contained)
 is the closest bundle-safe default; `php_phpactor` (MIT) is another option when
-PHP 8.1+ is deliberately included or required.
+PHP 8.1+ is deliberately included or required. Serena 1.7.0's PHPantom adapter does
+not extend its source matcher for project-specific extensions, so generic `.inc`
+files remain outside its semantic tools; do not describe PHPantom as Intelephense
+parity for pfBlockerNG until that adapter gap is fixed and exercised end to end.
 
 ## Assessment labels
 
@@ -168,7 +171,7 @@ the high-value permissive servers that need no project-specific compiler:
 - TypeScript/JavaScript, vtsls, Vue, Svelte, YAML, JSON, HTML, SCSS, Angular,
   Solidity, Ansible LS and Bash LS;
 - Pyright, basedpyright, ty, Pyrefly and fortls as fully staged uv environments;
-- PHPantom instead of Intelephense;
+- PHPantom instead of Intelephense for `.php`/`.phtml` (not generic `.inc` yet);
 - clangd where Serena has an artifact, LuaLS, luau-lsp, Taplo, Marksman,
   Verible, shader-language-server, CUE and Expert;
 - Serena's built-in mSL server.

@@ -327,7 +327,7 @@ describe("Serena headless and offline staging", () => {
     const fixtures = serenaPrefetchFixtures();
     expect(fixtures.map((f) => f.language)).toEqual([
       "typescript",
-      "php",
+      "php_phpantom",
       "bash",
       "yaml",
       "json",
@@ -340,7 +340,7 @@ describe("Serena headless and offline staging", () => {
   it("refuses dynamic downloads and project-controlled Serena settings", async () => {
     expect(serenaBundleProblem({})).toMatch(/SERENA_HOME/);
     expect(serenaBundleProblem({ SERENA_HOME: "/missing" })).toMatch(/manifest/);
-    expect(serenaBundleProblem({ LEVERET_ALLOW_UNPACKAGED_SERENA: "1" })).toBeNull();
+    expect(serenaBundleProblem({ LEVERET_ALLOW_UNPACKAGED_SERENA: "1" })).toMatch(/SERENA_HOME/);
 
     const { mkdtempSync, mkdirSync, rmSync } = await import("node:fs");
     const { tmpdir } = await import("node:os");
@@ -352,7 +352,7 @@ describe("Serena headless and offline staging", () => {
     rmSync(repo, { recursive: true, force: true });
   });
 
-  it("generates read-only Serena config only for staged languages present in the checkout", async () => {
+  it("uses bundled PHPantom for PHP without packaging Intelephense", async () => {
     const { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } = await import("node:fs");
     const { tmpdir } = await import("node:os");
     const { join } = await import("node:path");
@@ -362,23 +362,47 @@ describe("Serena headless and offline staging", () => {
     mkdirSync(repo);
     mkdirSync(home);
     mkdirSync(join(repo, "node_modules"));
-    const phpLsp = join(home, "intelephense");
+    const phpLsp = join(home, "phpantom_lsp");
     writeFileSync(phpLsp, "fixture\n");
-    writeFileSync(join(home, "leveret-lsp-manifest.json"), `${JSON.stringify({ languages: ["php", "typescript"], ls_paths: { php: phpLsp, typescript: join(home, "typescript-language-server") } })}\n`);
+    writeFileSync(join(home, "leveret-lsp-manifest.json"), `${JSON.stringify({ languages: ["php_phpantom", "typescript"], ls_paths: { php_phpantom: phpLsp, typescript: join(home, "typescript-language-server") } })}\n`);
     writeFileSync(join(repo, "composer.json"), "{}\n");
+    writeFileSync(join(repo, "index.php"), "<?php function index_value(): int { return 1; }\n");
     writeFileSync(join(repo, "plugin.inc"), "<?php function plugin() {}\n");
     writeFileSync(join(repo, "lib.rs"), "pub fn value() {}\n");
     writeFileSync(join(repo, "node_modules", "ignored.py"), "value = 1\n");
     try {
       const shadow = await createSerenaShadowProject(repo);
-      expect(await prepareSerenaProject(repo, shadow, home)).toEqual(["php"]);
+      expect(await prepareSerenaProject(repo, shadow, home)).toEqual(["php_phpantom"]);
       expect(lstatSync(join(shadow, "plugin.inc")).isSymbolicLink()).toBe(true);
       expect(existsSync(join(repo, ".serena"))).toBe(false);
       const config = readFileSync(join(shadow, ".serena", "project.yml"), "utf8");
       expect(config).toContain("read_only: true");
-      expect(config).toContain('file_filter:');
-      expect(config).toContain('  - .inc');
+      expect(config).toContain("php_phpantom:");
       expect(config).toContain(`ls_path: ${phpLsp}`);
+      expect(config).not.toContain("intelephense");
+      rmSync(shadow, { recursive: true, force: true });
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("does not claim PHPantom support for a generic .inc-only project", async () => {
+    const { mkdirSync, mkdtempSync, rmSync, writeFileSync } = await import("node:fs");
+    const { tmpdir } = await import("node:os");
+    const { join } = await import("node:path");
+    const root = mkdtempSync(join(tmpdir(), "leveret-phpantom-inc-"));
+    const repo = join(root, "repo");
+    const home = join(root, "home");
+    mkdirSync(repo);
+    mkdirSync(home);
+    const phpLsp = join(home, "phpantom_lsp");
+    writeFileSync(phpLsp, "fixture\n");
+    writeFileSync(join(home, "leveret-lsp-manifest.json"), `${JSON.stringify({ languages: ["php_phpantom"], ls_paths: { php_phpantom: phpLsp } })}\n`);
+    writeFileSync(join(repo, "composer.json"), "{}\n");
+    writeFileSync(join(repo, "plugin.inc"), "<?php function plugin() {}\n");
+    try {
+      const shadow = await createSerenaShadowProject(repo);
+      expect(await prepareSerenaProject(repo, shadow, home)).toEqual([]);
       rmSync(shadow, { recursive: true, force: true });
     } finally {
       rmSync(root, { recursive: true, force: true });
