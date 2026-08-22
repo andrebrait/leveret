@@ -6,6 +6,7 @@ import {
   brandName,
   page,
   publicHookProblem,
+  restartCommand,
   renderConfiguredPage,
   buildManifest,
   loadCredentials,
@@ -72,7 +73,9 @@ describe("publicHookProblem", () => {
   });
 
   it("replaces the form with the fix instead of letting GitHub reject the manifest", () => {
-    const html = renderSetupPage("http://127.0.0.1:8091", "http://127.0.0.1:8091", "st");
+    const html = renderSetupPage("http://127.0.0.1:8091", "http://127.0.0.1:8091", "st", undefined, {
+      restartCommand: "RESTART-ME",
+    });
     expect(html).toContain('<h2 class="center">Unreachable server</h2>');
     expect(html).toContain("<code>LEVERET_PUBLIC_URL</code> is not configured");
     expect(html).toContain("GitHub's Webhooks require a publicly-accessible endpoint");
@@ -80,17 +83,49 @@ describe("publicHookProblem", () => {
     expect(html).toContain('<a href="https://github.com/leveret-dev/leveret/blob/main/docs/app.md#getting-started">documentation</a>');
     expect(html).toContain("tailscale funnel");
     expect(html).toContain("Then restart with a public URL set, run:");
-    expect(html).toContain(
-      "<pre><code>LEVERET_PUBLIC_URL=https://YOUR-PUBLIC-URL node dist/app/server.js</code></pre>",
-    );
+    expect(html).toContain("<pre><code>RESTART-ME</code></pre>");
     expect(html).not.toContain("server's own address");
     expect(html).not.toContain('name="manifest"');
   });
 
   it("does not claim the variable is unset when it is set to an unreachable address", () => {
-    const html = renderSetupPage("http://10.0.0.5:8090", "http://127.0.0.1:8090", "st", undefined, true);
+    const html = renderSetupPage("http://10.0.0.5:8090", "http://127.0.0.1:8090", "st", undefined, {
+      publicUrlConfigured: true,
+    });
     expect(html).toContain("10.0.0.5");
     expect(html).not.toContain("is not configured");
+  });
+});
+
+describe("restartCommand", () => {
+  it("restarts what is actually running: absolute script path, runner preserved", () => {
+    // "node dist/app/server.js" only works from the repo root, and a restart that
+    // drops LEVERET_RUNNER silently downgrades every review to deterministic-only.
+    expect(restartCommand({}, ["/opt/node", "/srv/leveret/dist/app/server.js"])).toBe(
+      "LEVERET_PUBLIC_URL=https://YOUR-PUBLIC-URL node /srv/leveret/dist/app/server.js",
+    );
+    expect(
+      restartCommand({ LEVERET_RUNNER: "node /srv/leveret/dist/runner/omp.js" }, [
+        "/opt/node",
+        "/srv/leveret/dist/app/server.js",
+      ]),
+    ).toBe(
+      "LEVERET_PUBLIC_URL=https://YOUR-PUBLIC-URL LEVERET_RUNNER='node /srv/leveret/dist/runner/omp.js' node /srv/leveret/dist/app/server.js",
+    );
+    expect(restartCommand({ LEVERET_RUNNER: "it's odd" }, ["/opt/node", "/s.js"])).toContain(
+      "LEVERET_RUNNER='it'\\''s odd'",
+    );
+  });
+});
+
+describe("html escaping", () => {
+  it("never reflects a hostile Host header into the page", () => {
+    // only the configured branch echoes the URL back, so that is where it matters
+    const html = renderSetupPage("http://x<script>alert(1)</script>.local", "http://127.0.0.1", "st", undefined, {
+      publicUrlConfigured: true,
+    });
+    expect(html).not.toContain("<script>alert(1)</script>");
+    expect(html).toContain("&lt;script&gt;");
   });
 });
 

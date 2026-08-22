@@ -19,6 +19,7 @@ import {
   renderCallbackPage,
   renderConfiguredPage,
   renderSetupPage,
+  restartCommand,
   saveCredentials,
   type AppCredentials,
 } from "./manifest.js";
@@ -250,7 +251,10 @@ export async function main(): Promise<void> {
       const state = randomBytes(16).toString("hex");
       const org = url.searchParams.get("org") ?? undefined;
       setupStates.set(state, org);
-      html(res, 200, renderSetupPage(hookUrl(req, port), redirectBase(req, port), state, org, Boolean(process.env.LEVERET_PUBLIC_URL)));
+      html(res, 200, renderSetupPage(hookUrl(req, port), redirectBase(req, port), state, org, {
+        publicUrlConfigured: Boolean(process.env.LEVERET_PUBLIC_URL),
+        restartCommand: restartCommand(process.env, process.argv),
+      }));
       return;
     }
 
