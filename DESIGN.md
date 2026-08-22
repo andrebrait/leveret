@@ -273,10 +273,12 @@ downloads are refused.
 Its dashboard HTTP server, GUI, tray manager and anonymous usage report are disabled.
 The Pi adapter records durable tool metrics because Serena's dashboard-free counters
 otherwise remain process-local.
-The initial fixed-path bundle is intentionally limited to TypeScript/JavaScript, PHP,
-Bash, YAML, and JSON; its manifest records absolute packaged executables. Languages
-that still depend on uvx or a host toolchain are reported unavailable rather than
-being falsely labeled staged.
+The initial fixed-path bundle is intentionally limited to TypeScript/JavaScript,
+PHP through PHPantom (`.php`/`.phtml` only), Bash, YAML, and JSON; its manifest
+records absolute packaged executables. Serena 1.7.0 does not route generic `.inc`
+files to PHPantom, so Leveret does not claim that coverage. Languages that still
+depend on uvx or a host toolchain are reported unavailable rather than being falsely
+labeled staged.
 
 The autonomous Pi surface can read trusted rulings but cannot promote its own
 verdicts into memory. Its verdicts remain in the durable run artifact; versioned

@@ -48,11 +48,13 @@ SERENA_HOME=/opt/leveret/serena-home \
 node dist/runner/prefetch-serena.js --home /opt/leveret/serena-home
 ```
 
-The initial self-contained bundle covers TypeScript/JavaScript, PHP (including
-project-scoped `.inc`), Bash, YAML, and JSON. The manifest pins each absolute
-server executable under `SERENA_HOME`; prefetch fails instead of advertising a
-language backed only by a host toolchain or uvx cache. Python, C/C++, Go, Rust, and
-Java remain explicitly unavailable until their executables/runtimes are packaged.
+The initial self-contained bundle covers TypeScript/JavaScript, PHP through
+PHPantom (`.php`/`.phtml`), Bash, YAML, and JSON. Generic `.inc` files are not
+advertised as PHPantom-capable: Serena 1.7.0 does not route them to that backend.
+The manifest pins each absolute server executable under `SERENA_HOME`; prefetch
+fails instead of advertising a language backed only by a host toolchain or uvx
+cache. Python, C/C++, Go, Rust, and Java remain explicitly unavailable until their
+executables/runtimes are packaged.
 
 **2. Make the machine reachable for webhooks** (pick one):
 

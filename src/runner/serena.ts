@@ -16,7 +16,7 @@ export interface SerenaFixture {
 
 const FIXTURES: SerenaFixture[] = [
   { language: "typescript", files: [{ path: "package.json", content: '{"name":"fixture"}\n' }, { path: "index.ts", content: "export const value = 1;\n" }] },
-  { language: "php", files: [{ path: "composer.json", content: '{"name":"leveret/fixture"}\n' }, { path: "index.php", content: "<?php function value(): int { return 1; }\n" }] },
+  { language: "php_phpantom", files: [{ path: "composer.json", content: '{"name":"leveret/fixture"}\n' }, { path: "index.php", content: "<?php function value(): int { return 1; }\n" }] },
   { language: "bash", files: [{ path: "main.sh", content: "#!/bin/sh\nvalue=1\n" }] },
   { language: "yaml", files: [{ path: "config.yml", content: "value: 1\n" }] },
   { language: "json", files: [{ path: "config.json", content: '{"value":1}\n' }] },
@@ -24,7 +24,7 @@ const FIXTURES: SerenaFixture[] = [
 
 const PACKAGED_SERVERS: Record<string, { directory: string; executable: string }> = {
   typescript: { directory: "TypeScriptLanguageServer", executable: "typescript-language-server" },
-  php: { directory: "Intelephense", executable: "intelephense" },
+  php_phpantom: { directory: "PHPantomServer", executable: "phpantom_lsp" },
   bash: { directory: "BashLanguageServer", executable: "bash-language-server" },
   yaml: { directory: "YamlLanguageServer", executable: "yaml-language-server" },
   json: { directory: "JsonLanguageServer", executable: "vscode-json-languageserver" },
@@ -101,7 +101,6 @@ export function prefetchEnvironment(source: NodeJS.ProcessEnv = process.env): Re
 }
 
 export function serenaBundleProblem(env: NodeJS.ProcessEnv = process.env): string | null {
-  if (env.LEVERET_ALLOW_UNPACKAGED_SERENA === "1") return null;
   if (!env.SERENA_HOME) return "SERENA_HOME is unset; no packaged LSP bundle is available";
   if (!existsSync(join(env.SERENA_HOME, "leveret-lsp-manifest.json"))) {
     return `no staged Leveret LSP manifest in ${env.SERENA_HOME}`;
@@ -121,7 +120,7 @@ export function serenaProjectConfigProblem(repo: string): string | null {
 const LANGUAGE_EXTENSIONS: Record<string, Set<string>> = {
   typescript: new Set([".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs"]),
   python: new Set([".py", ".pyi"]),
-  php: new Set([".php", ".phtml"]),
+  php_phpantom: new Set([".php", ".phtml"]),
   bash: new Set([".sh", ".bash"]),
   yaml: new Set([".yaml", ".yml"]),
   json: new Set([".json", ".jsonc"]),
@@ -156,10 +155,6 @@ async function detectedLanguages(repo: string, staged: Set<string>): Promise<str
   const found = new Set<string>();
   for (const language of staged) {
     if ([...LANGUAGE_EXTENSIONS[language] ?? []].some((extension) => extensions.has(extension))) found.add(language);
-  }
-  if (staged.has("php") && existsSync(join(repo, "composer.json")) && extensions.has(".inc")) {
-    // .inc is generic; only a PHP project opts it into Intelephense.
-    found.add("php");
   }
   return [...found].sort((a, b) => serenaPrefetchFixtures().findIndex((f) => f.language === a) - serenaPrefetchFixtures().findIndex((f) => f.language === b));
 }
