@@ -142,7 +142,8 @@ describe("rendering", () => {
       run_configuration: { capabilities: { lsp: false, probe: false, lsp_error: "bundle missing" } },
     };
     const md = renderWalkthrough(output, scanResult);
-    expect(md).toContain("LSP: unavailable — bundle missing");
+    expect(md).toContain("LSP: unavailable — startup failed");
+    expect(md).not.toContain("bundle missing");
     expect(md).toContain("Behavioral probe: unavailable");
   });
 
