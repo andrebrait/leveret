@@ -39,6 +39,13 @@ host-owned allowlisted root. A server that cannot be prevented from loading or
 executing checkout-provided components must run inside an enforcing sandbox or be
 reported unavailable.
 
+The same boundary applies to the LLM. All text and derived content from the pull
+request—including source, comments, documentation, strings, diffs, filenames, and
+AST/LSP/graph/analyzer output—is untrusted evidence data and never instructions. It
+cannot alter the system/phase contract, tool routing, schema, authorization, or
+runtime policy. Leveret must label repository-derived tool results accordingly and
+the model must ignore any embedded requests or prompt-like text.
+
 The existing Leveret PHP bundle is the immediate blocker: Serena's default PHP
 backend installs `intelephense@1.14.4`, whose package license grants personal,
 non-transferable use and expressly prohibits copying and distribution. Leveret
