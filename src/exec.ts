@@ -15,11 +15,51 @@ export interface ExecResult {
 export interface RunOpts {
   /** hard cap: the child is SIGTERM'd at the deadline (no orphaned waits) */
   timeoutMs?: number;
+  /** explicit child environment; Pi runner uses this to keep provider secrets out of tools */
+  env?: NodeJS.ProcessEnv;
+  /** output cap; callers handling untrusted tools should keep this small */
+  maxBuffer?: number;
+}
+
+const SAFE_ENV_KEYS = [
+  "PATH",
+  "HOME",
+  "USER",
+  "LOGNAME",
+  "SHELL",
+  "TMPDIR",
+  "TMP",
+  "TEMP",
+  "LANG",
+  "LC_ALL",
+  "LC_CTYPE",
+  "TERM",
+  "CI",
+  "GITHUB_ACTIONS",
+  "XDG_CONFIG_HOME",
+  "XDG_CACHE_HOME",
+  "XDG_DATA_HOME",
+  "SSL_CERT_FILE",
+  "SSL_CERT_DIR",
+  "NODE_EXTRA_CA_CERTS",
+  "SYSTEMROOT",
+  "COMSPEC",
+  "PATHEXT",
+] as const;
+
+/** Environment for untrusted checkout tools: runtime basics, never provider/GitHub credentials. */
+export function safeChildEnvironment(source: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {
+  const env: NodeJS.ProcessEnv = {};
+  for (const key of SAFE_ENV_KEYS) {
+    if (source[key] !== undefined) env[key] = source[key];
+  }
+  return env;
 }
 
 export function run(cmd: string, args: string[], cwd: string, opts?: RunOpts): Promise<ExecResult> {
   return new Promise((resolve) => {
-    execFile(cmd, args, { cwd, maxBuffer: 64 * 1024 * 1024, timeout: opts?.timeoutMs ?? 0 }, (err, stdout, stderr) => {
+    const env = opts?.env ?? (process.env.LEVERET_SANITIZE_CHILD_ENV === "1" ? safeChildEnvironment() : undefined);
+    execFile(cmd, args, { cwd, env, maxBuffer: opts?.maxBuffer ?? 64 * 1024 * 1024, timeout: opts?.timeoutMs ?? 0 }, (err, stdout, stderr) => {
       let code = 0;
       let signal: string | undefined;
       if (err) {

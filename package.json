@@ -1,12 +1,14 @@
 {
   "name": "leveret",
   "version": "0.1.0",
-  "description": "leveret \u2014 self-hosted, hybrid engine for private code reviews: per-change static-analysis engine selection, normalized findings, graded filtering, over MCP.",
+  "description": "leveret — self-hosted, hybrid engine for private code reviews: per-change static-analysis engine selection, normalized findings, graded filtering, over MCP.",
   "type": "module",
   "bin": {
     "leveret": "dist/server.js",
     "leveret-app": "dist/app/server.js",
-    "leveret-runner-omp": "dist/runner/omp.js"
+    "leveret-runner-pi": "dist/runner/pi.js",
+    "leveret-runner-omp": "dist/runner/omp.js",
+    "leveret-prefetch-serena": "dist/runner/prefetch-serena.js"
   },
   "scripts": {
     "build": "tsc",
@@ -15,8 +17,10 @@
   },
   "license": "AGPL-3.0-or-later",
   "dependencies": {
+    "@earendil-works/pi-coding-agent": "0.84.2",
     "@modelcontextprotocol/sdk": "^1.30.0",
     "octokit": "^5.0.5",
+    "typebox": "1.3.7",
     "yaml": "^2.9.0",
     "zod": "^4.4.3"
   },
