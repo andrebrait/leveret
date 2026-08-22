@@ -3,9 +3,10 @@ import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js"
 import type { ToolDefinition } from "@earendil-works/pi-coding-agent";
 import type { TSchema } from "typebox";
 import { existsSync } from "node:fs";
-import { mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readdir, rm, symlink, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { basename, extname, join } from "node:path";
-import { stringify } from "yaml";
+import { parse, stringify } from "yaml";
 import { safeChildEnvironment } from "../exec.js";
 
 export interface SerenaFixture {
@@ -61,11 +62,28 @@ export function safeToolEnvironment(source: NodeJS.ProcessEnv = process.env): Re
   }).filter((entry): entry is [string, string] => entry[1] !== undefined));
 }
 
+export function prefetchEnvironment(source: NodeJS.ProcessEnv = process.env): Record<string, string> {
+  const env: Record<string, string> = Object.fromEntries(
+    Object.entries({
+      ...safeChildEnvironment(source),
+      ...(source.SERENA_HOME ? { SERENA_HOME: source.SERENA_HOME } : {}),
+      SERENA_USAGE_REPORTING: "false",
+    }).filter((entry): entry is [string, string] => entry[1] !== undefined),
+  );
+  for (const key of ["HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "NO_PROXY", "UV_INDEX_URL", "PIP_INDEX_URL", "npm_config_registry"]) {
+    if (source[key] !== undefined) env[key] = source[key]!;
+  }
+  return env;
+}
+
 export function serenaBundleProblem(env: NodeJS.ProcessEnv = process.env): string | null {
   if (env.LEVERET_ALLOW_UNPACKAGED_SERENA === "1") return null;
   if (!env.SERENA_HOME) return "SERENA_HOME is unset; no packaged LSP bundle is available";
   if (!existsSync(join(env.SERENA_HOME, "leveret-lsp-manifest.json"))) {
     return `no staged Leveret LSP manifest in ${env.SERENA_HOME}`;
+  }
+  if (!existsSync(join(env.SERENA_HOME, "language_servers", "static"))) {
+    return `no staged Serena language_servers/static directory in ${env.SERENA_HOME}`;
   }
   return null;
 }
@@ -91,11 +109,11 @@ const LANGUAGE_EXTENSIONS: Record<string, Set<string>> = {
 
 const SKIP_DIRS = new Set([".git", ".serena", "node_modules", "vendor", "dist", "build", "target", ".venv"]);
 
-async function detectedLanguages(repo: string, staged: Set<string>): Promise<string[]> {
-  const found = new Set<string>();
+async function sourceExtensions(repo: string): Promise<Set<string>> {
+  const extensions = new Set<string>();
   const stack = [repo];
   let visited = 0;
-  while (stack.length && found.size < staged.size && visited < 20_000) {
+  while (stack.length && visited < 20_000) {
     const dir = stack.pop()!;
     for (const entry of await readdir(dir, { withFileTypes: true })) {
       if (++visited >= 20_000) break;
@@ -103,44 +121,58 @@ async function detectedLanguages(repo: string, staged: Set<string>): Promise<str
         if (!SKIP_DIRS.has(entry.name)) stack.push(join(dir, entry.name));
         continue;
       }
-      const extension = extname(entry.name).toLowerCase();
-      for (const language of staged) {
-        if (LANGUAGE_EXTENSIONS[language]?.has(extension)) found.add(language);
-      }
+      if (entry.isFile()) extensions.add(extname(entry.name).toLowerCase());
     }
   }
-  if (staged.has("php") && existsSync(join(repo, "composer.json"))) {
+  return extensions;
+}
+
+async function detectedLanguages(repo: string, staged: Set<string>): Promise<string[]> {
+  const extensions = await sourceExtensions(repo);
+  const found = new Set<string>();
+  for (const language of staged) {
+    if ([...LANGUAGE_EXTENSIONS[language] ?? []].some((extension) => extensions.has(extension))) found.add(language);
+  }
+  if (staged.has("php") && existsSync(join(repo, "composer.json")) && extensions.has(".inc")) {
     // .inc is generic; only a PHP project opts it into Intelephense.
-    const hasInc = await hasExtension(repo, ".inc");
-    if (hasInc) found.add("php");
+    found.add("php");
   }
   return [...found].sort((a, b) => serenaPrefetchFixtures().findIndex((f) => f.language === a) - serenaPrefetchFixtures().findIndex((f) => f.language === b));
 }
 
-async function hasExtension(repo: string, wanted: string): Promise<boolean> {
-  const stack = [repo];
-  let visited = 0;
-  while (stack.length && visited < 20_000) {
-    const dir = stack.pop()!;
-    for (const entry of await readdir(dir, { withFileTypes: true })) {
-      if (++visited >= 20_000) return false;
-      if (entry.isDirectory()) {
-        if (!SKIP_DIRS.has(entry.name)) stack.push(join(dir, entry.name));
-      } else if (extname(entry.name).toLowerCase() === wanted) return true;
-    }
-  }
-  return false;
-}
-
-export async function prepareSerenaProject(repo: string, home: string): Promise<string[]> {
+export async function createSerenaShadowProject(repo: string): Promise<string> {
   const configProblem = serenaProjectConfigProblem(repo);
   if (configProblem) throw new Error(configProblem);
+  const shadow = await mkdtemp(join(tmpdir(), "leveret-serena-project-"));
+  try {
+    const stack = [{ source: repo, target: shadow }];
+    while (stack.length) {
+      const { source, target } = stack.pop()!;
+      for (const entry of await readdir(source, { withFileTypes: true })) {
+        if (entry.isDirectory()) {
+          if (SKIP_DIRS.has(entry.name)) continue;
+          const targetDir = join(target, entry.name);
+          await mkdir(targetDir);
+          stack.push({ source: join(source, entry.name), target: targetDir });
+        } else if (entry.isFile()) {
+          await symlink(join(source, entry.name), join(target, entry.name));
+        }
+      }
+    }
+    return shadow;
+  } catch (error) {
+    await rm(shadow, { recursive: true, force: true });
+    throw error;
+  }
+}
+
+export async function prepareSerenaProject(repo: string, projectRoot: string, home: string): Promise<string[]> {
   const manifest = JSON.parse(await readFile(join(home, "leveret-lsp-manifest.json"), "utf8")) as { languages?: unknown };
   if (!Array.isArray(manifest.languages) || !manifest.languages.every((language) => typeof language === "string")) {
     throw new Error("invalid Leveret LSP manifest");
   }
   const languages = await detectedLanguages(repo, new Set(manifest.languages));
-  const projectDir = join(repo, ".serena");
+  const projectDir = join(projectRoot, ".serena");
   await mkdir(projectDir);
   await writeFile(
     join(projectDir, "project.yml"),
@@ -154,6 +186,30 @@ export async function prepareSerenaProject(repo: string, home: string): Promise<
     }),
   );
   return languages;
+}
+
+export async function createSerenaRuntimeHome(stagedHome: string): Promise<string> {
+  const runtimeHome = await mkdtemp(join(tmpdir(), "leveret-serena-runtime-"));
+  const stagedConfigPath = join(stagedHome, "serena_config.yml");
+  const stagedConfig = existsSync(stagedConfigPath)
+    ? (parse(await readFile(stagedConfigPath, "utf8")) as Record<string, unknown>)
+    : {};
+  await symlink(join(stagedHome, "language_servers"), join(runtimeHome, "language_servers"), "dir");
+  await writeFile(
+    join(runtimeHome, "serena_config.yml"),
+    stringify({
+      ...stagedConfig,
+      language_backend: "LSP",
+      web_dashboard: false,
+      web_dashboard_open_on_launch: false,
+      web_dashboard_interface: "browser",
+      gui_log_window: false,
+      token_count_estimator: "CHAR_COUNT",
+      trusted_project_path_patterns: ["**"],
+      projects: [],
+    }),
+  );
+  return runtimeHome;
 }
 
 const READ_ONLY_TOOLS = new Set([
@@ -183,29 +239,32 @@ export interface SerenaBridge {
 }
 
 export async function connectSerena(repo: string, command = "serena", timeoutMs = 120_000): Promise<SerenaBridge> {
-  const generatedProjectDir = join(repo, ".serena");
-  const home = process.env.SERENA_HOME;
-  if (!home) throw new Error("SERENA_HOME is required for packaged Serena");
-  const languages = await prepareSerenaProject(repo, home);
-  if (languages.length === 0) {
-    return {
-      tools: [],
-      close: async () => {
-        await rm(generatedProjectDir, { recursive: true, force: true });
-      },
-    };
-  }
-  const transport = new StdioClientTransport({
-    command,
-    args: buildSerenaArgs(repo),
-    cwd: repo,
-    env: safeToolEnvironment(),
-    stderr: "pipe",
-    maxBufferSize: 16 * 1024 * 1024,
-  });
-  const client = new Client({ name: "leveret-runner-pi", version: "0.1.0" });
+  const stagedHome = process.env.SERENA_HOME;
+  if (!stagedHome) throw new Error("SERENA_HOME is required for packaged Serena");
+  const shadow = await createSerenaShadowProject(repo);
+  let runtimeHome: string | undefined;
+  let transport: StdioClientTransport | undefined;
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {
+    const languages = await prepareSerenaProject(repo, shadow, stagedHome);
+    if (languages.length === 0) {
+      return {
+        tools: [],
+        close: async () => {
+          await rm(shadow, { recursive: true, force: true });
+        },
+      };
+    }
+    runtimeHome = await createSerenaRuntimeHome(stagedHome);
+    transport = new StdioClientTransport({
+      command,
+      args: buildSerenaArgs(shadow),
+      cwd: shadow,
+      env: safeToolEnvironment({ ...process.env, SERENA_HOME: runtimeHome }),
+      stderr: "pipe",
+      maxBufferSize: 16 * 1024 * 1024,
+    });
+    const client = new Client({ name: "leveret-runner-pi", version: "0.1.0" });
     await Promise.race([
       client.connect(transport),
       new Promise<never>((_, reject) => {
@@ -220,10 +279,14 @@ export async function connectSerena(repo: string, command = "serena", timeoutMs 
         label: `LSP ${tool.name}`,
         description: tool.description ?? `Serena ${tool.name}`,
         parameters: tool.inputSchema as TSchema,
-        async execute(_toolCallId, params) {
-          const result = await client.callTool({ name: tool.name, arguments: params as Record<string, unknown> });
+        async execute(_toolCallId, params, signal) {
+          const result = await client.callTool(
+            { name: tool.name, arguments: params as Record<string, unknown> },
+            undefined,
+            { signal, timeout: 60_000, maxTotalTimeout: 60_000 },
+          );
           return {
-            content: [{ type: "text" as const, text: textContent(result) }],
+            content: [{ type: "text" as const, text: textContent(result).replaceAll(shadow, repo) }],
             details: { server: "serena", tool: tool.name, isError: result.isError === true },
           };
         },
@@ -234,12 +297,14 @@ export async function connectSerena(repo: string, command = "serena", timeoutMs 
       pid: transport.pid ?? undefined,
       close: async () => {
         await client.close();
-        await rm(generatedProjectDir, { recursive: true, force: true });
+        await rm(shadow, { recursive: true, force: true });
+        await rm(runtimeHome!, { recursive: true, force: true });
       },
     };
   } catch (error) {
-    await transport.close().catch(() => {});
-    await rm(generatedProjectDir, { recursive: true, force: true });
+    await transport?.close().catch(() => {});
+    await rm(shadow, { recursive: true, force: true });
+    if (runtimeHome) await rm(runtimeHome, { recursive: true, force: true });
     throw error;
   } finally {
     if (timer) clearTimeout(timer);

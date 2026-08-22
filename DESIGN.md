@@ -257,12 +257,18 @@ deadlines, metrics and output contract.
 The client uses in-memory settings and sessions plus a resource loader that returns
 no project settings, prompts, context files, extensions, skills or themes. The
 reviewed checkout cannot extend the toolset or replace the system prompt. Built-in
-mutation and shell tools are absent. A bounded probe tool is exposed only when the
-host explicitly declares an isolated review sandbox.
+filesystem, mutation, and shell tools are absent. Leveret supplies canonical-path,
+symlink-safe read/search/list tools that cannot leave the checkout. A bounded probe
+tool is exposed only when the host explicitly declares an isolated review sandbox.
+Autonomous reviews materialize `.leveret.yml` and repo rulings from the trusted base
+commit outside the checkout; PR-head policy cannot disable review, add an engine, or
+suppress its own findings.
 
 Leveret registers its scan/context/AST/memory functions directly, invokes CodeGraph
-through fixed adapters, and proxies a small read-only Serena toolset. Serena starts
-only from a pre-staged `SERENA_HOME` manifest; runtime LSP downloads are refused.
+through fixed adapters, and proxies a small read-only Serena toolset. Serena reads a
+disposable shadow tree of file symlinks and writes configuration/cache only outside
+the checkout. It starts only from a pre-staged `SERENA_HOME` manifest; runtime LSP
+downloads are refused.
 Its dashboard HTTP server, GUI, tray manager and anonymous usage report are disabled.
 The Pi adapter records durable tool metrics because Serena's dashboard-free counters
 otherwise remain process-local.

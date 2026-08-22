@@ -20,6 +20,7 @@ import { parseDuration, verifySchemaGaps } from "./omp.js";
 import { buildPiSystemPrompt, PI_SYSTEM_PROMPT_VERSION } from "./pi-system.js";
 import { buildPiTools } from "./pi-tools.js";
 import { connectSerena, serenaBundleProblem } from "./serena.js";
+import { materializeTrustedReviewState } from "../trusted-state.js";
 
 export interface PiRunnerParams {
   model?: string;
@@ -80,7 +81,15 @@ export interface ToolMetric {
   toolName: string;
   startedAt: number;
   endedAt: number;
+  duration_ms: number;
   isError: boolean;
+  outcome: "success" | "error" | "timeout";
+  input_bytes: number;
+  output_bytes: number;
+  output_tokens_estimate: number;
+  args_sha256: string;
+  server: "leveret" | "codegraph" | "serena" | "probe";
+  cache: "staged-cold" | "cold-index" | "n/a";
 }
 
 export function toolMetricsSummary(metrics: ToolMetric[]): Record<string, Record<string, { calls: number; errors: number; duration_ms: number }>> {
@@ -99,13 +108,14 @@ function piContract(text: string): string {
   return text.replace(/`leveret\.([a-z_]+)`/g, "`leveret_$1`");
 }
 
-async function withDeadline<T>(promise: Promise<T>, deadlineMs: number, abort: () => Promise<void>): Promise<T> {
+export async function withDeadline<T>(promise: Promise<T>, deadlineMs: number, abort: () => Promise<void>): Promise<T> {
   let timedOut = false;
   let timer: ReturnType<typeof setTimeout> | undefined;
   const timeout = new Promise<never>((_, reject) => {
     timer = setTimeout(() => {
       timedOut = true;
-      void abort().finally(() => reject(new Error(`Pi phase exceeded ${deadlineMs}ms and was aborted`)));
+      void abort().catch(() => {});
+      reject(new Error(`Pi phase exceeded ${deadlineMs}ms and was aborted`));
     }, deadlineMs);
   });
   try {
@@ -140,7 +150,7 @@ async function runPhase(options: {
       { projectTrusted: false },
     );
     const resourceLoader = buildPiResourceLoader(options.systemPrompt);
-    const toolNames = ["read", "grep", "find", "ls", ...options.tools.map((tool) => tool.name)];
+    const toolNames = options.tools.map((tool) => tool.name);
     const { session } = await createAgentSession({
       cwd: options.repo,
       agentDir: process.env.LEVERET_PI_AGENT_DIR ?? getAgentDir(),
@@ -154,19 +164,43 @@ async function runPhase(options: {
       settingsManager,
     });
     let assistantText = "";
-    const starts = new Map<string, { name: string; at: number }>();
+    const starts = new Map<string, { name: string; at: number; inputBytes: number; argsSha256: string }>();
     const unsubscribe = session.subscribe((event) => {
       if (event.type === "tool_execution_start") {
-        starts.set(event.toolCallId, { name: event.toolName, at: Date.now() });
+        const encoded = JSON.stringify(event.args ?? {});
+        starts.set(event.toolCallId, {
+          name: event.toolName,
+          at: Date.now(),
+          inputBytes: Buffer.byteLength(encoded),
+          argsSha256: createHash("sha256").update(encoded).digest("hex"),
+        });
       } else if (event.type === "tool_execution_end") {
         const start = starts.get(event.toolCallId);
+        const output = JSON.stringify(event.result ?? {});
+        const server = event.toolName.startsWith("codegraph_")
+          ? "codegraph"
+          : event.toolName.startsWith("lsp_")
+            ? "serena"
+            : event.toolName === "leveret_probe"
+              ? "probe"
+              : "leveret";
+        const endedAt = Date.now();
+        const timedOut = /timed? ?out|timeout|deadline|aborted|exceeded .*ms/i.test(output);
         options.metrics.push({
           phase: options.phase,
           toolCallId: event.toolCallId,
           toolName: event.toolName,
           startedAt: start?.at ?? Date.now(),
-          endedAt: Date.now(),
+          endedAt,
+          duration_ms: Math.max(0, endedAt - (start?.at ?? endedAt)),
           isError: event.isError,
+          outcome: timedOut ? "timeout" : event.isError ? "error" : "success",
+          input_bytes: start?.inputBytes ?? 0,
+          output_bytes: Buffer.byteLength(output),
+          output_tokens_estimate: Math.ceil(Buffer.byteLength(output) / 4),
+          args_sha256: start?.argsSha256 ?? createHash("sha256").update("{}").digest("hex"),
+          server,
+          cache: server === "serena" ? "staged-cold" : server === "codegraph" ? "cold-index" : "n/a",
         });
       } else if (event.type === "message_end" && event.message.role === "assistant") {
         assistantText = event.message.content
@@ -247,19 +281,29 @@ export async function main(): Promise<void> {
     lspError = `${serenaCommand} not found`;
   }
 
-  const bundle = await buildPiTools({
-    repo,
-    graphLive: process.env.LEVERET_GRAPH === "1",
-    sandboxed: process.env.LEVERET_SANDBOXED === "1",
-    serena,
-  });
-  const toolNames = ["read", "grep", "find", "ls", ...bundle.tools.map((tool) => tool.name)];
-  const systemPrompt = buildPiSystemPrompt(toolNames);
-  const systemPromptSha = createHash("sha256").update(systemPrompt).digest("hex");
-  const metrics: ToolMetric[] = [];
-
+  let trusted: Awaited<ReturnType<typeof materializeTrustedReviewState>>;
   try {
-    const reviewPrompt = piContract(await loadContract("review", { repo, base }));
+    trusted = await materializeTrustedReviewState(repo, base);
+  } catch (error) {
+    await serena?.close();
+    throw error;
+  }
+  let bundle: Awaited<ReturnType<typeof buildPiTools>> | undefined;
+  try {
+    bundle = await buildPiTools({
+      repo,
+      graphLive: process.env.LEVERET_GRAPH === "1",
+      sandboxed: process.env.LEVERET_SANDBOXED === "1",
+      serena,
+      profilePath: trusted.profilePath,
+      memoryRepo: trusted.root,
+      base,
+    });
+    const toolNames = bundle.tools.map((tool) => tool.name);
+    const systemPrompt = buildPiSystemPrompt(toolNames);
+    const systemPromptSha = createHash("sha256").update(systemPrompt).digest("hex");
+    const metrics: ToolMetric[] = [];
+    const reviewPrompt = piContract(await loadContract("review", { repo, base, rulingsRepo: trusted.root }));
     const review = await runPhase({
       phase: "review",
       prompt: reviewPrompt,
@@ -275,7 +319,7 @@ export async function main(): Promise<void> {
     const leads = process.env.LEVERET_LEADS ? await readFile(process.env.LEVERET_LEADS, "utf8") : "(scan leads unavailable)";
     const prior = process.env.LEVERET_PRIOR ? await readFile(process.env.LEVERET_PRIOR, "utf8") : "";
     const verifyPrompt = [
-      piContract(await loadContract("verify", { repo, base })),
+      piContract(await loadContract("verify", { repo, base, rulingsRepo: trusted.root })),
       "\n## The review agent's concerns to verify\n",
       concerns,
       "\n## The scan leads\n",
@@ -321,10 +365,13 @@ export async function main(): Promise<void> {
       system_prompt: { version: PI_SYSTEM_PROMPT_VERSION, sha256: systemPromptSha },
       capabilities: { ...bundle.capabilities, ...(lspError ? { lsp_error: lspError } : {}) },
       tools: toolMetricsSummary(metrics),
+      tool_calls: metrics,
     };
     process.stdout.write(JSON.stringify(out, null, 1));
   } finally {
-    await bundle.close();
+    if (bundle) await bundle.close();
+    else await serena?.close();
+    await trusted.close();
   }
 }
 

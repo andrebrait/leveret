@@ -23,6 +23,13 @@ npx pi
 # run /login, then exit
 ```
 
+Pi stores credentials in `~/.pi/agent/auth.json` (or
+`$LEVERET_PI_AGENT_DIR/auth.json`). OAuth tokens refresh there automatically when
+expired. Keep the directory private and the file mode `0600`; headless reviews read
+the provisioned credentials and never launch the login UI. API-key environment
+variables remain supported. The runner disables model-catalog refreshes and never
+passes these credentials to tools.
+
 Optionally stage the curated Serena LSP bundle during installation. This command
 performs downloads now; reviews refuse runtime LSP downloads:
 
@@ -198,6 +205,11 @@ can extend it. `PI_OFFLINE=1`, `PI_TELEMETRY=0`, and
 command is the escape hatch for other harnesses; it receives
 `LEVERET_REPO`, `LEVERET_BASE`, `LEVERET_LEADS`, `LEVERET_GRAPH` and must print
 the verify-output JSON (see `agents/verify.md`).
+
+For autonomous reviews, `.leveret.yml` and `.leveret/memory.jsonl` are read from
+the trusted base commit, not the pull-request head. Custom profile engines are not
+executed by the App/Pi path; use built-in engines or an explicitly sandboxed custom
+harness.
 
 Serena starts only when `SERENA_HOME` contains `leveret-lsp-manifest.json`, created
 by the prefetch command. Its dashboard, HTTP stats endpoint, GUI, tray process, and
