@@ -48,6 +48,8 @@ export function buildManifest(hookUrl: string, redirectBase: string, name = bran
 // The setup surfaces wear the logo's own palette: the plate, the white mark, and
 // the two eyes — a red minus and a green plus — so the pages, the avatar and the
 // review comments all read as one product.
+const DOCS_URL = "https://github.com/leveret-dev/leveret/blob/main/docs/app.md#getting-started";
+
 const PLATE = "#1d1728";
 const MARK = "#fafafa";
 const PLUS = "#a7ec21";
@@ -153,23 +155,28 @@ export function renderSetupPage(
   redirectBase: string,
   state: string,
   org?: string,
+  publicUrlConfigured = false,
 ): string {
   const unreachable = publicHookProblem(hookUrl);
   if (unreachable) {
+    const cause = publicUrlConfigured
+      ? `<code>LEVERET_PUBLIC_URL</code> points at <code>${hookUrl}</code>, and <code>${unreachable}</code> is not an address GitHub can reach.`
+      : "<code>LEVERET_PUBLIC_URL</code> is not configured.";
     return page(
       "Set up Leveret",
-      `<h2>This server is not reachable from GitHub yet</h2>
+      `<h2 class="center">Unreachable server</h2>
   <div class="card note">
-    <p>Webhooks would be delivered to <code>${hookUrl}</code>, and <code>${unreachable}</code>
-    is not an address GitHub can reach — it rejects the App at creation time. Publish the
-    server first, then restart it with that URL and reload this page:</p>
+    <p>${cause} GitHub's Webhooks require a publicly-accessible endpoint. Check the
+    Getting Started <a href="${DOCS_URL}">documentation</a>. Here are some easy ways to
+    get this working:</p>
     <ul>
       <li><code>tailscale funnel --bg 8090</code> — stable URL, nothing else to run</li>
       <li><code>cloudflared tunnel --url http://127.0.0.1:8090</code></li>
       <li><code>npx -y smee-client -u https://smee.io/YOUR_CHANNEL -t http://127.0.0.1:8090/</code>
       — relays webhooks only, so browse this page on the server's own address</li>
     </ul>
-    <p><code>LEVERET_PUBLIC_URL=https://YOUR-PUBLIC-URL node dist/app/server.js</code></p>
+    <p>Then restart with the public URL:
+    <code>LEVERET_PUBLIC_URL=https://YOUR-PUBLIC-URL node dist/app/server.js</code></p>
   </div>`,
     );
   }
