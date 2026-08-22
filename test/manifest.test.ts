@@ -4,7 +4,9 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   brandName,
+  dataDirLabel,
   page,
+  renderConfiguredPage,
   buildManifest,
   loadCredentials,
   renderCallbackPage,
@@ -50,6 +52,20 @@ describe("page", () => {
     expect(html).toContain("/assets/logo.svg");
     expect(html).toContain("<title>Some title</title>");
     expect(html).toContain("<p>body</p>");
+  });
+});
+
+describe("configured page", () => {
+  it("names the credentials it asks you to delete, without printing the absolute path", () => {
+    // /setup answers to anything that reaches the tunnel: an absolute path there
+    // would hand out the account name for free.
+    expect(dataDirLabel({})).toBe("~/.leveret-app");
+    expect(dataDirLabel({ LEVERET_DATA: "/srv/secret/leveret" })).toBe("$LEVERET_DATA");
+    const html = renderConfiguredPage(dataDirLabel({ LEVERET_DATA: "/srv/secret/leveret" }));
+    expect(html).toContain("app-credentials.json");
+    expect(html).toContain("app.pem");
+    expect(html).toContain("$LEVERET_DATA");
+    expect(html).not.toContain("/srv/secret/leveret");
   });
 });
 

@@ -96,6 +96,25 @@ export function page(title: string, body: string): string {
 </main></body></html>`;
 }
 
+/** How the credential directory is NAMED on a page: /setup answers to whatever
+ * reaches the tunnel, so the absolute path — which carries the account name —
+ * stays in the local startup log, never in a response. */
+export function dataDirLabel(env: Record<string, string | undefined>): string {
+  return env.LEVERET_DATA ? "$LEVERET_DATA" : "~/.leveret-app";
+}
+
+/** Shown at /setup once credentials exist: it asks the reader to delete something,
+ * so it has to say what and where. */
+export function renderConfiguredPage(dataDir: string): string {
+  return page(
+    "Leveret",
+    `<p class="card">Already configured — this server has its GitHub App. To run setup
+  again, delete <code>app-credentials.json</code> and <code>app.pem</code> from the
+  data directory (<code>${dataDir}</code>; the server prints the full path in its
+  startup log) and reload this page.</p>`,
+  );
+}
+
 export function renderSetupPage(
   hookUrl: string,
   redirectBase: string,
