@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   brandName,
+  page,
   buildManifest,
   loadCredentials,
   renderCallbackPage,
@@ -41,6 +42,17 @@ describe("brandName", () => {
   });
 });
 
+describe("page", () => {
+  it("wraps every server surface in the logo's own palette", () => {
+    const html = page("Some title", "<p>body</p>");
+    expect(html).toContain("#1d1728"); // logo plate
+    expect(html).toContain("#a7ec21"); // logo plus-eye, the accent
+    expect(html).toContain("/assets/logo.svg");
+    expect(html).toContain("<title>Some title</title>");
+    expect(html).toContain("<p>body</p>");
+  });
+});
+
 describe("renderSetupPage", () => {
   it("posts the manifest to GitHub with a state token", () => {
     const html = renderSetupPage("https://leveret.example:8090", "http://127.0.0.1:8090", "state123");
@@ -53,6 +65,9 @@ describe("renderSetupPage", () => {
   it("carries the brand: logo, an owner field that names the App, and the org prefill", () => {
     const html = renderSetupPage("https://leveret.example:8090", "http://127.0.0.1:8090", "st", "acme");
     expect(html).toContain("/assets/logo.svg");
+    expect(html).toContain("#1d1728");
+    // the avatar has to be uploaded by hand later, so the file is offered up front
+    expect(html).toContain('href="/assets/logo.png" download');
     expect(html).toContain('name="owner"');
     expect(html).toContain('value="acme"');
     // pre-named for the org, not the bare name every other install also wants
