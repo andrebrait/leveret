@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 import {
   brandName,
   page,
+  publicHookProblem,
   renderConfiguredPage,
   buildManifest,
   loadCredentials,
@@ -51,6 +52,30 @@ describe("page", () => {
     expect(html).toContain("/assets/logo.svg");
     expect(html).toContain("<title>Some title</title>");
     expect(html).toContain("<p>body</p>");
+  });
+});
+
+describe("publicHookProblem", () => {
+  it("catches the addresses GitHub refuses before the manifest is ever posted", () => {
+    // GitHub answers a loopback hook with "Hook url is not supported because it
+    // isn't reachable over the public Internet" — after the user has clicked.
+    expect(publicHookProblem("http://127.0.0.1:8091")).toContain("127.0.0.1");
+    expect(publicHookProblem("http://localhost:8090")).toBeTruthy();
+    expect(publicHookProblem("http://[::1]:8090")).toBeTruthy();
+    expect(publicHookProblem("http://10.0.0.5:8090")).toBeTruthy();
+    expect(publicHookProblem("http://192.168.1.9:8090")).toBeTruthy();
+    expect(publicHookProblem("http://172.20.3.4:8090")).toBeTruthy();
+    expect(publicHookProblem("http://100.101.102.103:8090")).toBeTruthy(); // tailnet IP
+    expect(publicHookProblem("http://fastbox.local:8090")).toBeTruthy();
+    expect(publicHookProblem("https://smee.io/R001HO80pV347cZ")).toBeNull();
+    expect(publicHookProblem("https://box.husky-bonito.ts.net")).toBeNull();
+  });
+
+  it("replaces the form with the fix instead of letting GitHub reject the manifest", () => {
+    const html = renderSetupPage("http://127.0.0.1:8091", "http://127.0.0.1:8091", "st");
+    expect(html).toContain("127.0.0.1");
+    expect(html).toContain("LEVERET_PUBLIC_URL");
+    expect(html).not.toContain('name="manifest"');
   });
 });
 
