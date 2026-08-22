@@ -23,6 +23,22 @@ different groups:
 4. proprietary, remote, or legally ambiguous components that Leveret must not
    redistribute without explicit permission or legal approval.
 
+Redistribution policy is not a runtime prohibition. An operator may own a license,
+toolchain, private package source, or right to download a server that Leveret cannot
+publish. Leveret must support both packaged/offline operation and explicit
+operator-controlled Serena downloads into a persistent, host-owned `SERENA_HOME`.
+Neither mode may expose GitHub/model credentials or write package state into the
+reviewed checkout.
+
+The pull-request checkout is input data only. It is never an authority for Leveret
+or Serena configuration, executable discovery, plugins, extensions, hooks,
+activation commands, SDKs, virtual environments, package-manager bins, or language
+servers. Valid configuration comes from the host or the trusted base commit
+materialized outside the checkout. Every executable path must canonicalize under a
+host-owned allowlisted root. A server that cannot be prevented from loading or
+executing checkout-provided components must run inside an enforcing sandbox or be
+reported unavailable.
+
 The existing Leveret PHP bundle is the immediate blocker: Serena's default PHP
 backend installs `intelephense@1.14.4`, whose package license grants personal,
 non-transferable use and expressly prohibits copying and distribution. Leveret
@@ -40,7 +56,8 @@ PHP 8.1+ is deliberately included or required.
 - **PREINSTALL**: require or install through the system/toolchain. This is an
   engineering decision, not necessarily a license prohibition.
 - **DO NOT REDISTRIBUTE**: the reviewed terms do not grant Leveret redistribution
-  rights.
+  rights. The user may still install or let Serena download the component under
+  rights that apply to that user.
 - **LEGAL REVIEW**: the downloaded binary's complete terms or transitive bundle
   were not sufficiently clear to approve redistribution.
 
@@ -87,7 +104,7 @@ license alone is not enough for a release gate.
 | `bsl` | `BSLLanguageServer` / bsl-language-server | managed JAR `0.29.0` | Requires Java 21+ | LGPL-3.0 | **BUNDLE + OBLIGATIONS**; include corresponding source/notices | [Serena](https://github.com/oraios/serena/blob/v1.7.0/src/solidlsp/language_servers/bsl_language_server.py) · [license](https://github.com/1c-syntax/bsl-language-server/blob/develop/LICENSE) |
 | `ada` | `AdaLanguageServer` / AdaCore ALS | managed `2026.2.202604091` | Native archives are platform-specific; GNAT/GPR project tooling improves results | GPL-3.0 | **BUNDLE + OBLIGATIONS**; exact binary/source correspondence required | [Serena](https://github.com/oraios/serena/blob/v1.7.0/src/solidlsp/language_servers/ada_language_server.py) · [license](https://github.com/AdaCore/ada_language_server/blob/master/COPYING3) |
 | `nextflow` | `NextflowLanguageServer` / Nextflow LS | managed JAR `26.04.3` | Requires Java 17+ | Apache-2.0 | **BUNDLE** JAR; include/provide JRE separately | [Serena](https://github.com/oraios/serena/blob/v1.7.0/src/solidlsp/language_servers/nextflow_language_server.py) · [license](https://github.com/nextflow-io/language-server/blob/main/LICENSE) |
-| `yaml` | `YamlLanguageServer` / Red Hat YAML LS | npm `yaml-language-server@1.19.2` | Node.js + npm; schema network access must remain disabled or use a vendored catalog | MIT | **BUNDLE** | [Serena](https://github.com/oraios/serena/blob/v1.7.0/src/solidlsp/language_servers/yaml_language_server.py) · [license](https://github.com/redhat-developer/yaml-language-server/blob/main/LICENSE) |
+| `yaml` | `YamlLanguageServer` / Red Hat YAML LS | npm `yaml-language-server@1.19.2` | Node.js + npm; schema network access follows operator policy or uses a vendored catalog | MIT | **BUNDLE** | [Serena](https://github.com/oraios/serena/blob/v1.7.0/src/solidlsp/language_servers/yaml_language_server.py) · [license](https://github.com/redhat-developer/yaml-language-server/blob/main/LICENSE) |
 | `json` | `JsonLanguageServer` / `vscode-json-languageserver` | npm `vscode-json-languageserver@1.3.4` | Node.js + npm | MIT | **BUNDLE** | [Serena](https://github.com/oraios/serena/blob/v1.7.0/src/solidlsp/language_servers/json_language_server.py) · [package](https://www.npmjs.com/package/vscode-json-languageserver) |
 | `toml` | `TaploServer` / Taplo | PATH or managed `0.10.0` | Native OS/arch artifacts; Serena validates download hashes for its pinned release | MIT | **BUNDLE** | [Serena](https://github.com/oraios/serena/blob/v1.7.0/src/solidlsp/language_servers/taplo_server.py) · [license](https://github.com/tamasfe/taplo/blob/master/LICENSE) |
 | `hlsl` | `HlslLanguageServer` / shader-language-server | PATH, managed binary/build `1.3.1` | Release binaries on Linux/Windows; Serena builds from Rust source on macOS when needed | MIT | **BUNDLE** exact built binary + source commit/notices | [Serena](https://github.com/oraios/serena/blob/v1.7.0/src/solidlsp/language_servers/hlsl_language_server.py) · [license](https://github.com/antaalt/shader-sense/blob/master/LICENSE) |
@@ -123,7 +140,7 @@ self-contained server artifact suitable for the existing Leveret prefetch model.
 | `ocaml` | `OcamlLanguageServer` / ocaml-lsp-server | uses opam switch; requires OCaml and ocaml-lsp-server >=1.23 for cross-file refs; no exact pin | ISC; **PREINSTALL** a project-compatible opam switch | [Serena](https://github.com/oraios/serena/blob/v1.7.0/src/solidlsp/language_servers/ocaml_lsp_server.py) · [license](https://github.com/ocaml/ocaml-lsp/blob/master/LICENSE.md) |
 | `al` | `ALLanguageServer` / Microsoft AL VS Code extension | Serena downloads Marketplace extension `18.0.2242655` | Microsoft Marketplace binary; the public `microsoft/AL` repository is samples, not a redistribution grant for the extension. **DO NOT REDISTRIBUTE** without Microsoft permission | [Serena](https://github.com/oraios/serena/blob/v1.7.0/src/solidlsp/language_servers/al_language_server.py) · [Marketplace terms](https://aka.ms/vsmarketplace-ToU) |
 | `rego` | `RegalLanguageServer` / Regal | `regal` from PATH; no pin | Apache-2.0; technically bundleable, but Serena has no managed artifact. **PREINSTALL** now; add a pinned packager to promote to BUNDLE | [Serena](https://github.com/oraios/serena/blob/v1.7.0/src/solidlsp/language_servers/regal_server.py) · [license](https://github.com/StyraInc/regal/blob/main/LICENSE) |
-| `julia` | `JuliaLanguageServer` / LanguageServer.jl | system Julia; runs unpinned `Pkg.add("LanguageServer")` if absent | MIT; unpinned network install violates Leveret reproducibility. **PREINSTALL** Julia environment pinned by Project/Manifest | [Serena](https://github.com/oraios/serena/blob/v1.7.0/src/solidlsp/language_servers/julia_server.py) · [license](https://github.com/julia-vscode/LanguageServer.jl/blob/master/LICENSE.md) |
+| `julia` | `JuliaLanguageServer` / LanguageServer.jl | system Julia; runs unpinned `Pkg.add("LanguageServer")` if absent | MIT; unsuitable for a published reproducible pack, but valid in operator-enabled download mode. **PREINSTALL** a pinned Julia Project/Manifest for offline use | [Serena](https://github.com/oraios/serena/blob/v1.7.0/src/solidlsp/language_servers/julia_server.py) · [license](https://github.com/julia-vscode/LanguageServer.jl/blob/master/LICENSE.md) |
 | `haskell` | `HaskellLanguageServer` / HLS wrapper | PATH/GHCup/Stack/Cabal; no pin | Apache-2.0; **PREINSTALL** compiler-matched HLS via GHCup | [Serena](https://github.com/oraios/serena/blob/v1.7.0/src/solidlsp/language_servers/haskell_language_server.py) · [license](https://github.com/haskell/haskell-language-server/blob/master/LICENSE) |
 | `lean4` | `Lean4LanguageServer` / built-in `lean --server` | `lean` and `lake` from elan/toolchain; no Serena pin | Apache-2.0; **PREINSTALL** project-selected Lean toolchain | [Serena](https://github.com/oraios/serena/blob/v1.7.0/src/solidlsp/language_servers/lean4_language_server.py) · [license](https://github.com/leanprover/lean4/blob/master/LICENSE) |
 | `groovy` | `GroovyLanguageServer` / user-supplied Groovy LS JAR | `ls_jar_path` is required; Serena only downloads vscode-java JRE bundle `1.42.0-561` | No canonical server artifact/license is selected, and aggregate JRE VSIX needs audit. **PREINSTALL** user JAR/JDK; do not advertise a bundled server | [Serena](https://github.com/oraios/serena/blob/v1.7.0/src/solidlsp/language_servers/groovy_language_server.py) · [configuration](https://github.com/oraios/serena/blob/v1.7.0/docs/02-usage/050_configuration.md#groovy) |
@@ -151,8 +168,8 @@ the high-value permissive servers that need no project-specific compiler:
 
 Node.js and Python/uv are runtime dependencies of this tier unless the produced
 artifact turns their servers into truly self-contained launchers. The install
-must set every `ls_path` explicitly from an immutable manifest and reviews must
-run with package/download networks disabled.
+must set every packaged `ls_path` explicitly from an immutable manifest. Its
+certification smoke runs with package/download networks disabled.
 
 ### Tier B: optional runtime/toolchain layers
 
@@ -162,7 +179,8 @@ Terraform LS plus user Terraform, Scala/Metals, F#/PowerShell plus .NET/pwsh,
 Haxe, MATLAB extension, Nextflow/JDK, and compiler-coupled system servers (Rust,
 Go, Ruby, Swift, Crystal, Zig, OCaml, Julia, Haskell, Lean, Gleam, Deno).
 
-Do not silently download these during a review. Image builds may download them;
+Do not download these during a review unless the operator enabled Serena downloads.
+Image builds may download them;
 the resulting layer must have a lock manifest, source URL, SHA-256, license set,
 SBOM, platform ID and a smoke-tested executable path.
 
@@ -172,7 +190,7 @@ TexLab, Pascal LS, Ada LS, BSL LS, nixd and ShellCheck require a copyleft
 compliance decision and corresponding-source delivery process. They are not
 appropriate for the first bundle merely because Serena can fetch them.
 
-### Tier D: user-provided or disabled
+### Tier D: user-provided or dynamically downloaded
 
 - Intelephense: redistribution is prohibited by the npm package license.
 - Microsoft AL extension: no verified redistribution grant.
@@ -192,17 +210,20 @@ appropriate for the first bundle merely because Serena can fetch them.
    every advertised ID with all network paths blocked. A cached `uvx`, npm,
    Coursier, Julia Pkg, Nix, rustup or toolchain fetch is not offline proof.
 4. Never copy a host-installed server into the artifact without provenance and
-   licensing metadata. Never follow a server's PATH lookup into the reviewed
-   checkout.
+   licensing metadata. Never follow PATH, config, plugin, extension, hook, SDK,
+   virtualenv, `node_modules/.bin`, `vendor/bin`, or binstub discovery into the
+   reviewed checkout. Treat project files only as untrusted analysis input.
 5. Produce an SPDX or CycloneDX SBOM and a third-party notices bundle from the
    actual artifact. Scan npm/Python/NuGet/JAR/native transitive dependencies and
    embedded runtimes, not only the top-level repository license.
 6. Refuse unsupported OS/architecture combinations explicitly. In particular,
    Serena 1.7.0 has gaps such as clangd Linux arm64, Dart Linux arm64 and the
    current Kotlin packaging's Windows support.
-7. Keep the existing runtime rule: reviews run offline for tooling. Missing or
-   corrupt LSP layers degrade visibly; they never trigger a package-manager or
-   language-toolchain download.
+7. Make runtime network behavior explicit operator policy. Recommended/default
+   packaged mode is offline: missing layers degrade visibly. An operator may enable
+   Serena package/download access through trusted YAML, environment, or CLI; those
+   downloads persist under host-owned `SERENA_HOME`, never the checkout. Host policy
+   can force offline, and neither mode exposes GitHub/model credentials.
 
 ## Primary Serena references
 
