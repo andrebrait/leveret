@@ -225,6 +225,28 @@ Deployment modes, same code:
 Either way the MCP surface stays the local/interactive interface; the App is a
 second consumer of the same engine + agent-contract code, not a fork of it.
 
+### Branding a user-owned App (2026-08-22)
+
+Self-hosting and branding pull against each other, and GitHub decides how far the
+brand can travel: an App has exactly one webhook URL, so one shared "Leveret" App
+cannot deliver to everybody's private server — mode 1 requires an App per user.
+Two more constraints follow from GitHub's own rules: App names are unique across
+all of GitHub (34 characters, slugged to lowercase with spaces as dashes), and the
+App-manifest schema has no avatar field.
+
+So the brand rides on three surfaces instead of on owning the name:
+
+- **The name's leading word.** Setup names the App `Leveret <owner>`, which slugs to
+  `leveret-<owner>` and signs every review `leveret-<owner>[bot]`.
+- **The avatar**, uploaded by hand — the one manual step, called out on both setup
+  pages with the PNG offered for download, because it is the mark that shows up
+  beside every comment.
+- **The comments themselves**, which are ours entirely: the walkthrough heading, the
+  hare, and the acknowledgement copy carry the product regardless of the App's name.
+
+Mode 2 would restore a single branded App, at the cost of the perimeter — which is
+the trade that mode 2 already is.
+
 ### Runner standardization (owner decision, 2026-08-21)
 
 Prompt contracts alone do not standardize a reviewer: the harness (tool

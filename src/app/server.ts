@@ -15,6 +15,7 @@ import { parsePriorThreads, resolvedReply, type PriorFinding } from "./increment
 import {
   convertManifestCode,
   loadCredentials,
+  page,
   renderCallbackPage,
   renderSetupPage,
   saveCredentials,
@@ -242,7 +243,7 @@ export async function main(): Promise<void> {
 
     if (req.method === "GET" && url.pathname === "/setup") {
       if (creds) {
-        html(res, 200, "<p>Leveret is already configured. Delete the credentials in the data dir to re-run setup.</p>");
+        html(res, 200, page("Leveret", "<p class=\"card\">Already configured. Delete the credentials in the data dir to re-run setup.</p>"));
         return;
       }
       const state = randomBytes(16).toString("hex");
@@ -256,7 +257,7 @@ export async function main(): Promise<void> {
       const code = url.searchParams.get("code");
       const state = url.searchParams.get("state");
       if (!code || !state || !setupStates.has(state)) {
-        html(res, 400, "<p>Invalid or expired setup state; start again at /setup.</p>");
+        html(res, 400, page("Leveret setup", '<p class="card err">Invalid or expired setup state — start again at <a href="/setup">/setup</a>.</p>'));
         return;
       }
       const org = setupStates.get(state);
@@ -267,7 +268,9 @@ export async function main(): Promise<void> {
           creds = await loadCredentials(DATA_DIR, process.env);
           html(res, 200, renderCallbackPage(c.htmlUrl, org));
         })
-        .catch((err) => html(res, 500, `<p>Setup failed: ${String(err)}</p>`));
+        .catch((err) =>
+          html(res, 500, page("Leveret setup", `<p class="card err">Setup failed: ${String(err)}</p>`)),
+        );
       return;
     }
 
@@ -275,7 +278,12 @@ export async function main(): Promise<void> {
       html(
         res,
         creds ? 200 : 503,
-        creds ? "<p>Leveret is running.</p>" : '<p>Unconfigured — go to <a href="/setup">/setup</a>.</p>',
+        page(
+          "Leveret",
+          creds
+            ? '<p class="card">Running — waiting on pull request webhooks.</p>'
+            : '<p class="card">Unconfigured. <a href="/setup">Create your GitHub App</a> to get started.</p>',
+        ),
       );
       return;
     }

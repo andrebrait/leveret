@@ -45,21 +45,56 @@ export function buildManifest(hookUrl: string, redirectBase: string, name = bran
   };
 }
 
-const PAGE_HEAD = `<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+// The setup surfaces wear the logo's own palette: the plate, the white mark, and
+// the two eyes — a red minus and a green plus — so the pages, the avatar and the
+// review comments all read as one product.
+const PLATE = "#1d1728";
+const MARK = "#fafafa";
+const PLUS = "#a7ec21";
+const MINUS = "#ff6b68";
+
+/** Every HTML response the App layer emits, in one branded shell. */
+export function page(title: string, body: string): string {
+  return `<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>${title}</title>
+<link rel="icon" href="/assets/logo.svg">
 <style>
- body { font-family: system-ui, sans-serif; max-width: 42rem; margin: 3rem auto; padding: 0 1.5rem;
-        line-height: 1.5; color: #1c1c1e; background: #fbfaf8; }
- img.logo { width: 8rem; display: block; margin: 0 auto 1rem; }
- h1 { text-align: center; font-weight: 650; margin: 0 0 .25rem; }
- p.tag { text-align: center; color: #6a6a70; margin: 0 0 2rem; }
- label { display: block; font-weight: 600; margin: 1.5rem 0 .35rem; }
- input[type=text] { width: 100%; padding: .55rem .7rem; font-size: 1rem; border: 1px solid #cfcbc4;
-        border-radius: .4rem; box-sizing: border-box; }
- small { color: #6a6a70; display: block; margin-top: .4rem; }
- button { margin-top: 1.75rem; font-size: 1.05rem; font-weight: 600; padding: .65rem 1.5rem;
-        border: 0; border-radius: .4rem; background: #3d9e6a; color: #fff; cursor: pointer; }
- ol { padding-left: 1.2rem; } li { margin: .6rem 0; }
-</style>`;
+ :root { color-scheme: dark; }
+ body { margin: 0; padding: 3rem 1.25rem; background: ${PLATE}; color: ${MARK};
+        font: 16px/1.6 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; }
+ main { max-width: 40rem; margin: 0 auto; }
+ header { text-align: center; margin-bottom: 2.5rem; }
+ header img { width: 7rem; border-radius: 17%; }
+ h1 { font-size: 1.9rem; font-weight: 650; letter-spacing: -.02em; margin: 1rem 0 .35rem; }
+ .tag { color: ${MARK}99; margin: 0; }
+ a { color: ${PLUS}; }
+ code { background: ${MARK}14; padding: .1rem .35rem; border-radius: .25rem;
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .9em; }
+ .card { background: ${MARK}0d; border: 1px solid ${MARK}1f; border-radius: .9rem; padding: 1.5rem; }
+ label { display: block; font-weight: 600; margin-bottom: .4rem; }
+ input[type=text] { width: 100%; box-sizing: border-box; padding: .6rem .75rem; font-size: 1rem;
+        color: ${MARK}; background: ${PLATE}; border: 1px solid ${MARK}33; border-radius: .45rem; }
+ input[type=text]:focus { outline: 2px solid ${PLUS}; border-color: transparent; }
+ small { display: block; color: ${MARK}99; margin-top: .5rem; }
+ button { margin-top: 1.5rem; width: 100%; font: inherit; font-weight: 650; padding: .7rem 1.5rem;
+        border: 0; border-radius: .45rem; background: ${PLUS}; color: ${PLATE}; cursor: pointer; }
+ button:hover { filter: brightness(1.08); }
+ .ghost { display: inline-block; margin-top: 1.25rem; padding: .45rem .9rem; border-radius: .45rem;
+        border: 1px solid ${MARK}33; color: ${MARK}; text-decoration: none; font-size: .9rem; }
+ ol { padding-left: 1.25rem; margin: 0; } li { margin: .75rem 0; }
+ .err { color: ${MINUS}; }
+</style></head>
+<body><main>
+  <header>
+    <img src="/assets/logo.svg" alt="">
+    <h1>Leveret</h1>
+    <p class="tag">Self-hosted code review. Nothing about your code leaves this machine.</p>
+  </header>
+  ${body}
+</main></body></html>`;
+}
 
 export function renderSetupPage(
   hookUrl: string,
@@ -71,25 +106,26 @@ export function renderSetupPage(
   const action = org
     ? `https://github.com/organizations/${org}/settings/apps/new?state=${state}`
     : `https://github.com/settings/apps/new?state=${state}`;
-  return `<!doctype html>
-<html><head><title>Set up Leveret</title>${PAGE_HEAD}</head>
-<body>
-  <img class="logo" src="/assets/logo.svg" alt="Leveret">
-  <h1>Set up Leveret</h1>
-  <p class="tag">A GitHub App <strong>owned by you</strong>, pointed at <strong>this</strong> server.</p>
-  <p>GitHub will show one confirmation screen. The App is created under your account,
-  its webhook already points here, and the credentials it returns are written to this
-  machine only — Leveret has no hosted side to send them to.</p>
-  <form action="${action}" method="post">
+  return page(
+    "Set up Leveret",
+    `<p>This creates a GitHub App <strong>owned by you</strong>, with its webhook already
+  pointing at this server. GitHub shows one confirmation screen; the credentials come
+  back here and are stored on this machine only.</p>
+  <form class="card" action="${action}" method="post">
     <input type="hidden" name="manifest" value='${manifest.replaceAll("'", "&#39;")}'>
     <label for="owner">Name it after your account or organization</label>
-    <input type="text" id="owner" name="owner" value="${(org ?? "").replaceAll('"', "&quot;")}" placeholder="acme" autocomplete="off">
-    <small>App names are unique across GitHub, so only one App anywhere can be called
-    plain “Leveret”. Keeping the word in front is what preserves the branding: “Leveret
-    acme” posts its reviews as <code>leveret-acme[bot]</code>. You can still edit the
-    name on GitHub's confirmation screen.</small>
+    <input type="text" id="owner" name="owner" value="${(org ?? "").replaceAll('"', "&quot;")}" placeholder="acme" autocomplete="off" spellcheck="false">
+    <small>GitHub App names are unique across all of GitHub, so only one App anywhere
+    can be called plain &ldquo;Leveret&rdquo;. Leading with the word is what keeps the
+    branding: <strong>Leveret acme</strong> signs its reviews
+    <code>leveret-acme[bot]</code>. You can still edit the name on GitHub's
+    confirmation screen.</small>
     <button type="submit">Create the App on GitHub</button>
   </form>
+  <p><a class="ghost" href="/assets/logo.png" download>&#11015; Download the logo (PNG)</a>
+  <small>GitHub App manifests carry no avatar field, so the App's picture is the one
+  thing set by hand — upload this file under <em>Display information</em> once the App
+  exists. It is the logo that appears beside every review comment.</small></p>
   <script>
    const f = document.forms[0];
    f.addEventListener("submit", () => {
@@ -97,35 +133,29 @@ export function renderSetupPage(
      m.name = ("Leveret " + f.owner.value.trim()).trim().slice(0, 34);
      f.manifest.value = JSON.stringify(m);
    });
-  </script>
-</body></html>`;
+  </script>`,
+  );
 }
 
 /** After the credentials land: the two things GitHub's manifest flow cannot do for
- * us. The manifest schema has no avatar field, so the hare that appears beside every
- * review comment has to be uploaded by hand — one click, and it is the branding
- * users actually see on a pull request. */
+ * us — the avatar (no manifest field for it) and picking the repositories. */
 export function renderCallbackPage(htmlUrl: string, org?: string): string {
   const slug = htmlUrl.replace(/\/+$/, "").split("/").pop() ?? "";
   const settings = org
     ? `https://github.com/organizations/${org}/settings/apps/${slug}`
     : `https://github.com/settings/apps/${slug}`;
-  return `<!doctype html>
-<html><head><title>Leveret is yours</title>${PAGE_HEAD}</head>
-<body>
-  <img class="logo" src="/assets/logo.svg" alt="Leveret">
-  <h1>The App is yours</h1>
-  <p class="tag">Credentials stored on this machine, mode 0600. Two steps left.</p>
-  <ol>
+  return page(
+    "Leveret is yours",
+    `<p>The App is yours. Its credentials are on this machine, mode 0600. Two steps left:</p>
+  <ol class="card">
     <li><strong>Give it its face.</strong> <a href="/assets/logo.png" download>Download the logo</a>,
     then upload it under <em>Display information</em> in
-    <a href="${settings}" target="_blank" rel="noreferrer">the App's settings</a>.
-    GitHub App manifests carry no avatar field, so this one is manual — and it is the
-    logo that shows up beside every review comment.</li>
+    <a href="${settings}" target="_blank" rel="noreferrer">the App's settings</a> — this is
+    the logo that appears beside every review comment.</li>
     <li><strong><a href="${htmlUrl}/installations/new" target="_blank" rel="noreferrer">Install it on your repositories</a></strong>,
     then open a pull request.</li>
-  </ol>
-</body></html>`;
+  </ol>`,
+  );
 }
 
 export interface AppCredentials {
