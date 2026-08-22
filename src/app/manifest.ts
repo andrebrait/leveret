@@ -114,12 +114,64 @@ export function renderConfiguredPage(dataDir: string): string {
   );
 }
 
+/** GitHub refuses a manifest whose hook is not reachable over the public Internet,
+ * and it refuses it AFTER the click, in its own words. Catch the addresses it will
+ * reject — loopback, RFC1918, the tailnet range, mDNS names — while we can still
+ * say what to do about it. Returns the offending host, or null when it looks
+ * routable. */
+export function publicHookProblem(hookUrl: string): string | null {
+  let host: string;
+  try {
+    host = new URL(hookUrl).hostname.replace(/^\[|\]$/g, "");
+  } catch {
+    return hookUrl;
+  }
+  const octets = host.split(".");
+  const n = (i: number) => Number(octets[i]);
+  const privateV4 =
+    octets.length === 4 &&
+    octets.every((o) => /^\d{1,3}$/.test(o)) &&
+    (n(0) === 127 ||
+      n(0) === 10 ||
+      n(0) === 0 ||
+      (n(0) === 192 && n(1) === 168) ||
+      (n(0) === 172 && n(1) >= 16 && n(1) <= 31) ||
+      (n(0) === 169 && n(1) === 254) ||
+      (n(0) === 100 && n(1) >= 64 && n(1) <= 127));
+  const localName =
+    host === "localhost" ||
+    host === "::1" ||
+    host.endsWith(".local") ||
+    host.endsWith(".internal") ||
+    !host.includes(".");
+  return privateV4 || localName ? host : null;
+}
+
 export function renderSetupPage(
   hookUrl: string,
   redirectBase: string,
   state: string,
   org?: string,
 ): string {
+  const unreachable = publicHookProblem(hookUrl);
+  if (unreachable) {
+    return page(
+      "Set up Leveret",
+      `<h2>This server is not reachable from GitHub yet</h2>
+  <div class="card note">
+    <p>Webhooks would be delivered to <code>${hookUrl}</code>, and <code>${unreachable}</code>
+    is not an address GitHub can reach — it rejects the App at creation time. Publish the
+    server first, then restart it with that URL and reload this page:</p>
+    <ul>
+      <li><code>tailscale funnel --bg 8090</code> — stable URL, nothing else to run</li>
+      <li><code>cloudflared tunnel --url http://127.0.0.1:8090</code></li>
+      <li><code>npx -y smee-client -u https://smee.io/YOUR_CHANNEL -t http://127.0.0.1:8090/</code>
+      — relays webhooks only, so browse this page on the server's own address</li>
+    </ul>
+    <p><code>LEVERET_PUBLIC_URL=https://YOUR-PUBLIC-URL node dist/app/server.js</code></p>
+  </div>`,
+    );
+  }
   const manifest = JSON.stringify(buildManifest(hookUrl, redirectBase, brandName(org)));
   const action = org
     ? `https://github.com/organizations/${org}/settings/apps/new?state=${state}`
