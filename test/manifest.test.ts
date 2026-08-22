@@ -82,7 +82,9 @@ describe("publicHookProblem", () => {
 describe("configured page", () => {
   it("states the fact, then lists the exact files to delete by full path", () => {
     const html = renderConfiguredPage("/srv/leveret-data");
-    expect(html).toContain("already configured");
+    expect(html).toContain("Server configured and working!");
+    expect(html).toContain("To reconfigure this server, delete these files and reload:");
+    expect(html).toContain("center");
     expect(html).toContain("<li><code>/srv/leveret-data/app-credentials.json</code></li>");
     expect(html).toContain("<li><code>/srv/leveret-data/app.pem</code></li>");
   });

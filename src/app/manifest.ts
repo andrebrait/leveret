@@ -85,6 +85,7 @@ export function page(title: string, body: string): string {
         border: 1px solid ${MARK}33; color: ${MARK}; text-decoration: none; font-size: .9rem; }
  ol, ul { padding-left: 1.25rem; margin: .5rem 0 0; } li { margin: .4rem 0; }
  h2 { font-size: 1.25rem; font-weight: 600; margin: 0 0 1rem; }
+ .center { text-align: center; }
  .note { font-size: .92rem; color: ${MARK}b3; } .note p { margin: 0; }
  .err { color: ${MINUS}; }
 </style></head>
@@ -103,9 +104,9 @@ export function page(title: string, body: string): string {
 export function renderConfiguredPage(dataDir: string): string {
   return page(
     "Leveret",
-    `<h2>GitHub App already configured</h2>
+    `<h2 class="center">Server configured and working!</h2>
   <div class="card note">
-    <p>To reset it, delete these files and reload:</p>
+    <p>To reconfigure this server, delete these files and reload:</p>
     <ul>
       <li><code>${dataDir}/app-credentials.json</code></li>
       <li><code>${dataDir}/app.pem</code></li>
