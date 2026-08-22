@@ -113,8 +113,8 @@ export function renderConfiguredPage(dataDir: string): string {
   <div class="card note">
     <p>To reconfigure this server, delete these files and reload:</p>
     <ul>
-      <li><code>${dataDir}/app-credentials.json</code></li>
-      <li><code>${dataDir}/app.pem</code></li>
+      <li><code>${esc(dataDir)}/app-credentials.json</code></li>
+      <li><code>${esc(dataDir)}/app.pem</code></li>
     </ul>
   </div>`,
   );
@@ -153,18 +153,48 @@ export function publicHookProblem(hookUrl: string): string | null {
   return privateV4 || localName ? host : null;
 }
 
+/** Everything interpolated into a page can come from the request (the Host header
+ * reaches hookUrl) or from disk, so it is escaped on the way in. */
+function esc(value: string): string {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
+}
+
+const shq = (value: string): string => `'${value.replaceAll("'", `'\\''`)}'`;
+
+/** The restart line the page prints has to be the command this process was
+ * actually started with: "node dist/app/server.js" only resolves from the repo
+ * root, and a restart that forgets LEVERET_RUNNER silently downgrades every
+ * review to the deterministic-only fallback. */
+export function restartCommand(
+  env: Record<string, string | undefined>,
+  argv: string[],
+): string {
+  return [
+    "LEVERET_PUBLIC_URL=https://YOUR-PUBLIC-URL",
+    ...(env.LEVERET_RUNNER ? [`LEVERET_RUNNER=${shq(env.LEVERET_RUNNER)}`] : []),
+    "node",
+    argv[1] ?? "dist/app/server.js",
+  ].join(" ");
+}
+
 export function renderSetupPage(
   hookUrl: string,
   redirectBase: string,
   state: string,
   org?: string,
-  publicUrlConfigured = false,
+  opts: { publicUrlConfigured?: boolean; restartCommand?: string } = {},
 ): string {
   const unreachable = publicHookProblem(hookUrl);
   if (unreachable) {
-    const cause = publicUrlConfigured
-      ? `<code>LEVERET_PUBLIC_URL</code> points at <code>${hookUrl}</code>, and <code>${unreachable}</code> is not an address GitHub can reach.`
+    const cause = opts.publicUrlConfigured
+      ? `<code>LEVERET_PUBLIC_URL</code> points at <code>${esc(hookUrl)}</code>, and <code>${esc(unreachable)}</code> is not an address GitHub can reach.`
       : "<code>LEVERET_PUBLIC_URL</code> is not configured.";
+    const restart = opts.restartCommand ?? restartCommand({}, []);
     return page(
       "Set up Leveret",
       `<h2 class="center">Unreachable server</h2>
@@ -179,13 +209,13 @@ export function renderSetupPage(
       — relays webhooks only</li>
     </ul>
     <p>Then restart with a public URL set, run:</p>
-    <pre><code>LEVERET_PUBLIC_URL=https://YOUR-PUBLIC-URL node dist/app/server.js</code></pre>
+    <pre><code>${esc(restart)}</code></pre>
   </div>`,
     );
   }
   const manifest = JSON.stringify(buildManifest(hookUrl, redirectBase, brandName(org)));
   const action = org
-    ? `https://github.com/organizations/${org}/settings/apps/new?state=${state}`
+    ? `https://github.com/organizations/${encodeURIComponent(org)}/settings/apps/new?state=${state}`
     : `https://github.com/settings/apps/new?state=${state}`;
   return page(
     "Set up Leveret",
@@ -195,7 +225,7 @@ export function renderSetupPage(
   <form class="card" action="${action}" method="post">
     <input type="hidden" name="manifest" value='${manifest.replaceAll("'", "&#39;")}'>
     <label for="owner">Name it after your account or organization</label>
-    <input type="text" id="owner" name="owner" value="${(org ?? "").replaceAll('"', "&quot;")}" placeholder="acme" autocomplete="off" spellcheck="false">
+    <input type="text" id="owner" name="owner" value="${esc(org ?? "")}" placeholder="acme" autocomplete="off" spellcheck="false">
     <small>GitHub App names are unique across all of GitHub, so only one App anywhere
     can be called plain &ldquo;Leveret&rdquo;. Leading with the word is what keeps the
     branding: <strong>Leveret acme</strong> signs its reviews
